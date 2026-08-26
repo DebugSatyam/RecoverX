@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from .database import Base, engine, get_db
 from .models import Customer, Payment, RecoveryAttempt, AuditEvent
-
+from .risk_engine import assess_payment_risk, calculate_revenue_at_risk
 
 Base.metadata.create_all(bind=engine)
 
@@ -78,3 +78,49 @@ def create_demo_recovery_case(db: Session = Depends(get_db)):
         "recovery_attempt_id": recovery.id,
         "audit_event_id": audit.id
     }
+
+@app.get("/risk/payment/{payment_id}")
+def assess_payment(payment_id: int, db: Session = Depends(get_db)):
+    payment = db.query(Payment).filter(Payment.id == payment_id).first()
+
+    if payment is None:
+        return {
+            "error": "Payment not found"
+        }
+
+    customer = (
+        db.query(Customer)
+        .filter(Customer.id == payment.customer_id)
+        .first()
+    )
+
+    if customer is None:
+        return {
+            "error": "Customer not found"
+        }
+
+    assessment = assess_payment_risk(payment, customer)
+
+    return {
+        "payment_id": payment.id,
+        "customer_id": customer.id,
+        "amount": payment.amount,
+        "status": payment.status,
+        "failure_reason": payment.failure_reason,
+        "attempt_count": payment.attempt_count,
+        "risk_level": assessment.risk_level,
+        "recovery_probability": assessment.recovery_probability,
+        "reasons": assessment.reasons
+    }
+
+@app.get("/risk/overview")
+def risk_overview(db: Session = Depends(get_db)):
+    payments = db.query(Payment).all()
+    customers = db.query(Customer).all()
+
+    result = calculate_revenue_at_risk(
+        payments,
+        customers
+    )
+
+    return result
