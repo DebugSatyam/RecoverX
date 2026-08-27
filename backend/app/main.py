@@ -4,6 +4,10 @@ from sqlalchemy.orm import Session
 from .database import Base, engine, get_db
 from .models import Customer, Payment, RecoveryAttempt, AuditEvent
 from .risk_engine import assess_payment_risk, calculate_revenue_at_risk
+from .ai_agent import (
+    create_recovery_context,
+    run_groq_ai_agent
+)
 
 Base.metadata.create_all(bind=engine)
 
@@ -124,3 +128,77 @@ def risk_overview(db: Session = Depends(get_db)):
     )
 
     return result
+
+@app.get("/ai/context/{payment_id}")
+def get_ai_context(
+    payment_id: int,
+    db: Session = Depends(get_db)
+):
+    payment = (
+        db.query(Payment)
+        .filter(Payment.id == payment_id)
+        .first()
+    )
+
+    if payment is None:
+        return {
+            "error": "Payment not found"
+        }
+
+    customer = (
+        db.query(Customer)
+        .filter(Customer.id == payment.customer_id)
+        .first()
+    )
+
+    if customer is None:
+        return {
+            "error": "Customer not found"
+        }
+
+    context = create_recovery_context(
+        payment,
+        customer
+    )
+
+    return context.model_dump()
+
+@app.get("/ai/groq-recommendation/{payment_id}")
+def get_groq_recommendation(
+    payment_id: int,
+    db: Session = Depends(get_db)
+):
+    payment = (
+        db.query(Payment)
+        .filter(Payment.id == payment_id)
+        .first()
+    )
+
+    if payment is None:
+        return {
+            "error": "Payment not found"
+        }
+
+    customer = (
+        db.query(Customer)
+        .filter(Customer.id == payment.customer_id)
+        .first()
+    )
+
+    if customer is None:
+        return {
+            "error": "Customer not found"
+        }
+
+    context = create_recovery_context(
+        payment,
+        customer
+    )
+
+    recommendation = run_groq_ai_agent(context)
+
+    return {
+        "payment_id": payment.id,
+        "context": context.model_dump(),
+        "recommendation": recommendation.model_dump()
+    }
