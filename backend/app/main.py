@@ -8,6 +8,8 @@ from .ai_agent import (
     create_recovery_context,
     run_groq_ai_agent
 )
+from .policy_engine import evaluate_policy
+from datetime import datetime
 
 Base.metadata.create_all(bind=engine)
 
@@ -24,13 +26,20 @@ def health_check():
 
 @app.post("/demo/recovery-case")
 def create_demo_recovery_case(db: Session = Depends(get_db)):
-    customer = Customer(
-        name="Rahul Sharma",
-        email="rahul@example.com",
-        successful_payments=8,
-        failed_payments=1,
-        lifetime_value=39992.0,
-        payment_reliability=0.89
+    customer = (
+        db.query(Customer)
+        .filter(Customer.email == "rahul@example.com")
+        .first()
+    )
+
+    if customer is None:
+        customer = Customer(
+            name="Rahul Sharma",
+            email="rahul@example.com",
+            successful_payments=8,
+            failed_payments=1,
+            lifetime_value=39992.0,
+            payment_reliability=0.89
     )
 
     db.add(customer)
@@ -58,7 +67,7 @@ def create_demo_recovery_case(db: Session = Depends(get_db)):
         policy_decision="approved",
         execution_result="pending",
         recovered_amount=0.0,
-        timestamp="2026-08-25T10:05:00"
+        timestamp=datetime.now().isoformat()
     )
 
     db.add(recovery)
@@ -69,7 +78,7 @@ def create_demo_recovery_case(db: Session = Depends(get_db)):
         recovery_attempt_id=recovery.id,
         event_type="recovery_created",
         description="RecoverX approved a delayed retry for a historically reliable customer.",
-        timestamp="2026-08-25T10:05:00"
+        timestamp=datetime.now().isoformat()
     )
 
     db.add(audit)
@@ -190,15 +199,93 @@ def get_groq_recommendation(
             "error": "Customer not found"
         }
 
+    # ---------------------------------------------
+    # 1. Create recovery context
+    # ---------------------------------------------
+
     context = create_recovery_context(
         payment,
         customer
     )
 
+    # ---------------------------------------------
+    # 2. Ask AI for recommendation
+    # ---------------------------------------------
+
     recommendation = run_groq_ai_agent(context)
+
+    # ---------------------------------------------
+    # 3. Deterministic policy validation
+    # ---------------------------------------------
+
+    policy_decision = evaluate_policy(
+        payment,
+        recommendation
+    )
+
+    # ---------------------------------------------
+    # 4. Save recovery attempt
+    # ---------------------------------------------
+
+    recovery = RecoveryAttempt(
+        payment_id=payment.id,
+        ai_probability=recommendation.recovery_probability,
+        recommended_action=recommendation.recommended_action,
+        policy_decision=policy_decision.decision,
+        execution_result="pending",
+        recovered_amount=0.0,
+        timestamp="2026-08-29T10:00:00"
+    )
+
+    db.add(recovery)
+    db.commit()
+    db.refresh(recovery)
+
+    # ---------------------------------------------
+    # 5. Save audit event
+    # ---------------------------------------------
+
+    audit = AuditEvent(
+        recovery_attempt_id=recovery.id,
+        event_type="policy_evaluated",
+        description=(
+            f"RecoverX policy decision: "
+            f"{policy_decision.decision}. "
+            f"{policy_decision.reason}"
+        ),
+        timestamp="2026-08-29T10:00:00"
+    )
+
+    db.add(audit)
+    db.commit()
+    db.refresh(audit)
+
+    # ---------------------------------------------
+    # 6. Return complete decision
+    # ---------------------------------------------
 
     return {
         "payment_id": payment.id,
+
         "context": context.model_dump(),
-        "recommendation": recommendation.model_dump()
+
+        "recommendation": recommendation.model_dump(),
+
+        "policy": {
+            "decision": policy_decision.decision,
+            "allowed": policy_decision.allowed,
+            "reason": policy_decision.reason
+        },
+
+        "recovery_attempt": {
+            "id": recovery.id,
+            "execution_result": recovery.execution_result,
+            "recovered_amount": recovery.recovered_amount
+        },
+
+        "audit": {
+            "id": audit.id,
+            "event_type": audit.event_type,
+            "description": audit.description
+        }
     }
