@@ -9,6 +9,7 @@ from .ai_agent import (
     run_groq_ai_agent
 )
 from .policy_engine import evaluate_policy
+from .razorpay_service import razorpay_service  
 from datetime import datetime
 
 Base.metadata.create_all(bind=engine)
@@ -64,7 +65,7 @@ def create_demo_recovery_case(db: Session = Depends(get_db)):
         payment_id=payment.id,
         ai_probability=0.87,
         recommended_action="delayed_retry",
-        policy_decision="approved",
+        policy_decision="APPROVE",
         execution_result="pending",
         recovered_amount=0.0,
         timestamp=datetime.now().isoformat()
@@ -234,7 +235,7 @@ def get_groq_recommendation(
         policy_decision=policy_decision.decision,
         execution_result="pending",
         recovered_amount=0.0,
-        timestamp="2026-08-29T10:00:00"
+        timestamp=datetime.now().isoformat()
     )
 
     db.add(recovery)
@@ -253,7 +254,7 @@ def get_groq_recommendation(
             f"{policy_decision.decision}. "
             f"{policy_decision.reason}"
         ),
-        timestamp="2026-08-29T10:00:00"
+        timestamp=datetime.now().isoformat()
     )
 
     db.add(audit)
@@ -283,6 +284,123 @@ def get_groq_recommendation(
             "recovered_amount": recovery.recovered_amount
         },
 
+        "audit": {
+            "id": audit.id,
+            "event_type": audit.event_type,
+            "description": audit.description
+        }
+    }
+
+@app.post("/recovery/execute/{recovery_id}")
+def execute_recovery(
+    recovery_id: int,
+    db: Session = Depends(get_db)
+):
+    # ---------------------------------------------
+    # 1. Find recovery attempt
+    # ---------------------------------------------
+
+    recovery = (
+        db.query(RecoveryAttempt)
+        .filter(RecoveryAttempt.id == recovery_id)
+        .first()
+    )
+
+    if recovery is None:
+        return {
+            "error": "Recovery attempt not found"
+        }
+
+    # ---------------------------------------------
+    # 2. Safety boundary
+    # ---------------------------------------------
+
+    if recovery.policy_decision != "APPROVE":
+        return {
+            "status": "blocked",
+            "reason": (
+                "Recovery execution is only allowed "
+                "for APPROVE policy decisions."
+            ),
+            "recovery_attempt_id": recovery.id
+        }
+
+    # ---------------------------------------------
+    # 2b. Prevent duplicate execution
+    # ---------------------------------------------
+
+    if recovery.execution_result != "pending":
+        return {
+            "status": "blocked",
+            "reason": "Recovery attempt has already been executed.",
+            "recovery_attempt_id": recovery.id,
+            "execution_result": recovery.execution_result
+        }
+
+    # ---------------------------------------------
+    # 3. Find payment
+    # ---------------------------------------------
+
+    payment = (
+        db.query(Payment)
+        .filter(Payment.id == recovery.payment_id)
+        .first()
+    )
+
+    if payment is None:
+        return {
+            "error": "Payment not found"
+        }
+
+    # ---------------------------------------------
+    # 4. Execute approved recovery
+    # ---------------------------------------------
+
+    result = razorpay_service.execute_recovery(
+        payment,
+        recovery.recommended_action
+    )
+
+    # ---------------------------------------------
+    # 5. Save execution outcome
+    # ---------------------------------------------
+
+    recovery.execution_result = result["status"]
+    recovery.recovered_amount = result["recovered_amount"]
+
+    db.commit()
+    db.refresh(recovery)
+
+    # ---------------------------------------------
+    # 6. Create audit event
+    # ---------------------------------------------
+
+    audit = AuditEvent(
+        recovery_attempt_id=recovery.id,
+        event_type="recovery_executed",
+        description=(
+            f"Recovery action '{recovery.recommended_action}' "
+            f"executed with result '{result['status']}'. "
+            f"Recovered amount: ₹{result['recovered_amount']:.2f}."
+        ),
+        timestamp=datetime.now().isoformat()
+    )
+
+    db.add(audit)
+    db.commit()
+    db.refresh(audit)
+
+    # ---------------------------------------------
+    # 7. Return execution result
+    # ---------------------------------------------
+
+    return {
+        "status": result["status"],
+        "message": result["message"],
+        "payment_id": payment.id,
+        "recovery_attempt_id": recovery.id,
+        "executed_action": recovery.recommended_action,
+        "recovered_amount": recovery.recovered_amount,
         "audit": {
             "id": audit.id,
             "event_type": audit.event_type,

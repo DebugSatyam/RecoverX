@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from risk_engine import assess_payment_risk
+from app.risk_engine import assess_payment_risk
 
 
 customer = SimpleNamespace(
@@ -9,8 +9,10 @@ customer = SimpleNamespace(
 
 payment = SimpleNamespace(
     amount=4999.0,
+    status ="failed",
     failure_reason="insufficient_funds",
-    attempt_count=1
+    attempt_count=1  
+    
 )
 
 
