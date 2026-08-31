@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
 from .database import Base, engine, get_db
@@ -15,6 +16,16 @@ from datetime import datetime
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="RecoverX API")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/health")
@@ -62,7 +73,7 @@ def create_demo_recovery_case(db: Session = Depends(get_db)):
     db.refresh(payment)
 
     recovery = RecoveryAttempt(
-        payment_id=payment.id,
+        payment_id=payment.payment_id,
         ai_probability=0.87,
         recommended_action="delayed_retry",
         policy_decision="APPROVE",
@@ -88,14 +99,14 @@ def create_demo_recovery_case(db: Session = Depends(get_db)):
 
     return {
         "customer_id": customer.id,
-        "payment_id": payment.id,
+        "payment_id": payment.payment_id,
         "recovery_attempt_id": recovery.id,
         "audit_event_id": audit.id
     }
 
 @app.get("/risk/payment/{payment_id}")
 def assess_payment(payment_id: int, db: Session = Depends(get_db)):
-    payment = db.query(Payment).filter(Payment.id == payment_id).first()
+    payment = db.query(Payment).filter(payment.Payment_id == payment_id).first()
 
     if payment is None:
         return {
@@ -138,6 +149,60 @@ def risk_overview(db: Session = Depends(get_db)):
     )
 
     return result
+
+
+@app.get("/recovery/queue")
+def recovery_queue(db: Session = Depends(get_db)):
+    recoveries = (
+        db.query(RecoveryAttempt)
+        .order_by(RecoveryAttempt.id.desc())
+        .all()
+    )
+
+    queue = []
+
+    for recovery in recoveries:
+        payment = (
+            db.query(Payment)
+            .filter(Payment.id == recovery.payment_id)
+            .first()
+        )
+
+        if payment is None:
+            continue
+
+        customer = (
+            db.query(Customer)
+            .filter(Customer.id == payment.customer_id)
+            .first()
+        )
+
+        if customer is None:
+            continue
+
+        if recovery.policy_decision == "APPROVE":
+            status = "Ready"
+        else:
+            status = "Review"
+
+        queue.append({
+            "recovery_id": recovery.id,
+            "payment_id": payment.id,
+            "customer": customer.name,
+            "amount": payment.amount,
+            "reason": payment.failure_reason,
+            "probability": recovery.ai_probability,
+            "action": recovery.recommended_action,
+            "policy": recovery.policy_decision,
+            "execution_result": recovery.execution_result,
+            "status": status,
+            "timestamp": recovery.timestamp
+        })
+
+    return {
+        "count": len(queue),
+        "queue": queue
+    }
 
 @app.get("/ai/context/{payment_id}")
 def get_ai_context(
@@ -406,4 +471,52 @@ def execute_recovery(
             "event_type": audit.event_type,
             "description": audit.description
         }
+    }
+
+@app.get("/recovery/queue")
+def recovery_queue(db: Session = Depends(get_db)):
+    recoveries = (
+        db.query(RecoveryAttempt)
+        .order_by(RecoveryAttempt.id.desc())
+        .all()
+    )
+
+    queue = []
+
+    for recovery in recoveries:
+        payment = (
+            db.query(Payment)
+            .filter(Payment.id == recovery.payment_id)
+            .first()
+        )
+
+        if payment is None:
+            continue
+
+        customer = (
+            db.query(Customer)
+            .filter(Customer.id == payment.customer_id)
+            .first()
+        )
+
+        queue.append({
+            "recovery_id": recovery.id,
+            "payment_id": payment.id,
+            "customer": customer.name if customer else "Unknown",
+            "amount": payment.amount,
+            "reason": payment.failure_reason,
+            "probability": recovery.ai_probability,
+            "action": recovery.recommended_action,
+            "status": (
+                "Ready"
+                if recovery.policy_decision == "APPROVE"
+                else "Review"
+            ),
+            "policy_decision": recovery.policy_decision,
+            "execution_result": recovery.execution_result,
+        })
+
+    return {
+        "count": len(queue),
+        "queue": queue
     }

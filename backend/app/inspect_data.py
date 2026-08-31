@@ -39,7 +39,7 @@ def inspect_dataset():
         failure_reasons = (
             db.query(
                 Payment.failure_reason,
-                func.count(Payment.id)
+                func.count(payment.Payment_id)
             )
             .filter(Payment.status == "failed")
             .group_by(Payment.failure_reason)
