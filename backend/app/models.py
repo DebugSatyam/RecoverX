@@ -41,14 +41,19 @@ class RecoveryAttempt(Base):
 
     payment_id = Column(Integer, nullable=False, index=True)
 
+    # AI decision
     ai_probability = Column(Float, nullable=True)
-
+    confidence = Column(Float, nullable=True)
+    diagnosis = Column(String, nullable=True)
+    explanation = Column(String, nullable=True)
     recommended_action = Column(String, nullable=True)
+    retry_after_hours = Column(Integer, nullable=True)
 
+    # Deterministic policy decision
     policy_decision = Column(String, nullable=True)
 
+    # Execution outcome
     execution_result = Column(String, nullable=True)
-
     recovered_amount = Column(Float, default=0.0)
 
     timestamp = Column(String, nullable=False)

@@ -106,7 +106,7 @@ export default function Home() {
   const [aiLoading, setAiLoading] = useState(false);
 
   const [executionLoading, setExecutionLoading] = useState(false);
-const [executionResult, setExecutionResult] = useState<any>(null);
+  const [executionResult, setExecutionResult] = useState<any>(null);
 
   useEffect(() => {
     async function fetchRecoveryQueue() {
@@ -133,7 +133,7 @@ const [executionResult, setExecutionResult] = useState<any>(null);
     fetchRecoveryQueue();
   }, []);
 
-    useEffect(() => {
+  useEffect(() => {
     async function fetchOverview() {
       try {
         setOverviewLoading(true);
@@ -163,30 +163,30 @@ const [executionResult, setExecutionResult] = useState<any>(null);
   }, []);
 
   async function fetchAIRecommendation(paymentId: number) {
-  try {
-    setAiLoading(true);
-    setAiRecommendation(null);
+    try {
+      setAiLoading(true);
+      setAiRecommendation(null);
 
-    const response = await fetch(
-      `http://127.0.0.1:8000/ai/groq-recommendation/${paymentId}`
-    );
+      const response = await fetch(
+        `http://127.0.0.1:8000/ai/groq-recommendation/${paymentId}`
+      );
 
-    if (!response.ok) {
-      throw new Error("Failed to fetch AI recommendation");
+      if (!response.ok) {
+        throw new Error("Failed to fetch AI recommendation");
+      }
+
+      const data = await response.json();
+
+      setAiRecommendation(data);
+    } catch (error) {
+      console.error(
+        "[browser] RecoverX AI recommendation error:",
+        error
+      );
+    } finally {
+      setAiLoading(false);
     }
-
-    const data = await response.json();
-
-    setAiRecommendation(data);
-  } catch (error) {
-    console.error(
-      "[browser] RecoverX AI recommendation error:",
-      error
-    );
-  } finally {
-    setAiLoading(false);
   }
-}
 
   const navigation = [
     { name: "Overview", icon: "⌂" },
@@ -197,43 +197,43 @@ const [executionResult, setExecutionResult] = useState<any>(null);
   ];
 
   async function executeRecovery(recoveryId: number) {
-  try {
-    setExecutionLoading(true);
-    setExecutionResult(null);
+    try {
+      setExecutionLoading(true);
+      setExecutionResult(null);
 
-    const response = await fetch(
-      `http://127.0.0.1:8000/recovery/execute/${recoveryId}`,
-      {
-        method: "POST",
+      const response = await fetch(
+        `http://127.0.0.1:8000/recovery/execute/${recoveryId}`,
+        {
+          method: "POST",
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || "Failed to execute recovery");
       }
-    );
 
-    const data = await response.json();
+      setExecutionResult(data);
 
-    if (!response.ok) {
-      throw new Error(data.detail || "Failed to execute recovery");
+      // Refresh queue after execution
+      const queueResponse = await fetch(
+        "http://127.0.0.1:8000/recovery/queue"
+      );
+
+      if (queueResponse.ok) {
+        const queueData = await queueResponse.json();
+        setPayments(queueData.queue);
+      }
+    } catch (error) {
+      console.error(
+        "[browser] RecoverX recovery execution error:",
+        error
+      );
+    } finally {
+      setExecutionLoading(false);
     }
-
-    setExecutionResult(data);
-
-    // Refresh queue after execution
-    const queueResponse = await fetch(
-      "http://127.0.0.1:8000/recovery/queue"
-    );
-
-    if (queueResponse.ok) {
-      const queueData = await queueResponse.json();
-      setPayments(queueData.queue);
-    }
-  } catch (error) {
-    console.error(
-      "[browser] RecoverX recovery execution error:",
-      error
-    );
-  } finally {
-    setExecutionLoading(false);
   }
-}
   return (
     <main className="min-h-screen bg-[#0b0c0d] text-[#f4f4f2]">
       {/* Ambient light */}
@@ -245,61 +245,61 @@ const [executionResult, setExecutionResult] = useState<any>(null);
       <div className="relative flex min-h-screen">
         {/* SIDEBAR */}
         <aside className="hidden w-[240px] shrink-0 border-r border-white/[0.07] bg-[#0b0c0d] px-5 py-6 lg:flex lg:flex-col">
-         <div className="mb-12 px-1">
-  <div className="group flex cursor-pointer items-center gap-3">
-    {/* RecoverX brand mark */}
-    <div className="relative flex h-9 w-9 shrink-0 items-center justify-center">
-      <div className="absolute inset-0 rounded-[11px] border border-white/[0.12] bg-white/[0.045] transition-all duration-300 group-hover:border-emerald-300/30 group-hover:bg-emerald-300/[0.06]" />
+          <div className="mb-12 px-1">
+            <div className="group flex cursor-pointer items-center gap-3">
+              {/* RecoverX brand mark */}
+              <div className="relative flex h-9 w-9 shrink-0 items-center justify-center">
+                <div className="absolute inset-0 rounded-[11px] border border-white/[0.12] bg-white/[0.045] transition-all duration-300 group-hover:border-emerald-300/30 group-hover:bg-emerald-300/[0.06]" />
 
-      <svg
-        viewBox="0 0 32 32"
-        className="relative h-[22px] w-[22px] transition-transform duration-300 group-hover:scale-110"
-        fill="none"
-      >
-        <path
-          d="M8 8L24 24"
-          stroke="currentColor"
-          strokeWidth="2.8"
-          strokeLinecap="round"
-          className="text-white"
-        />
+                <svg
+                  viewBox="0 0 32 32"
+                  className="relative h-[22px] w-[22px] transition-transform duration-300 group-hover:scale-110"
+                  fill="none"
+                >
+                  <path
+                    d="M8 8L24 24"
+                    stroke="currentColor"
+                    strokeWidth="2.8"
+                    strokeLinecap="round"
+                    className="text-white"
+                  />
 
-        <path
-          d="M24 8L14.5 17.5"
-          stroke="currentColor"
-          strokeWidth="2.8"
-          strokeLinecap="round"
-          className="text-emerald-300"
-        />
+                  <path
+                    d="M24 8L14.5 17.5"
+                    stroke="currentColor"
+                    strokeWidth="2.8"
+                    strokeLinecap="round"
+                    className="text-emerald-300"
+                  />
 
-        <path
-          d="M11.5 20.5L8 24"
-          stroke="currentColor"
-          strokeWidth="2.8"
-          strokeLinecap="round"
-          className="text-emerald-300"
-        />
-      </svg>
-    </div>
+                  <path
+                    d="M11.5 20.5L8 24"
+                    stroke="currentColor"
+                    strokeWidth="2.8"
+                    strokeLinecap="round"
+                    className="text-emerald-300"
+                  />
+                </svg>
+              </div>
 
-    {/* Wordmark */}
-    <div className="leading-none">
-      <div className="flex items-baseline">
-        <span className="text-[16px] font-semibold tracking-[-0.045em] text-white">
-          Recover
-        </span>
+              {/* Wordmark */}
+              <div className="leading-none">
+                <div className="flex items-baseline">
+                  <span className="text-[16px] font-semibold tracking-[-0.045em] text-white">
+                    Recover
+                  </span>
 
-        <span className="text-[16px] font-semibold tracking-[-0.045em] text-emerald-300">
-          X
-        </span>
-      </div>
+                  <span className="text-[16px] font-semibold tracking-[-0.045em] text-emerald-300">
+                    X
+                  </span>
+                </div>
 
-      <div className="mt-[5px] text-[9px] font-medium uppercase tracking-[0.17em] text-white/25">
-        Revenue intelligence
-      </div>
-    </div>
-  </div>
-</div>
+                <div className="mt-[5px] text-[9px] font-medium uppercase tracking-[0.17em] text-white/25">
+                  Revenue intelligence
+                </div>
+              </div>
+            </div>
+          </div>
 
           <div className="mb-3 px-2 text-[10px] font-medium uppercase tracking-[0.18em] text-white/25">
             Workspace
@@ -423,69 +423,68 @@ const [executionResult, setExecutionResult] = useState<any>(null);
 
             {/* KPI ROW */}
             <Metric
-  label="Revenue at risk"
-  value={
-    <>
-      ₹
-      {overviewLoading ? (
-        <span className="inline-block h-8 w-28 animate-pulse rounded bg-white/[0.08]" />
-      ) : (
-        <AnimatedNumber target={overview?.revenue_at_risk ?? 0} />
-      )}
-    </>
-  }
-  change="Live"
-  positive={false}
-  large
-/>
-             <Metric
-  label="Expected recoverable"
-  value={
-    <>
-      ₹
-      {overviewLoading ? (
-        <span className="inline-block h-7 w-24 animate-pulse rounded bg-white/[0.08]" />
-      ) : (
-        <AnimatedNumber
-          target={overview?.expected_recoverable_revenue ?? 0}
-        />
-      )}
-    </>
-  }
-  change="Live"
-  positive
-/>  
-              <Metric
-  label="Recovery rate"
-  value={
-    overview && overview.revenue_at_risk > 0
-      ? `${(
-          (overview.expected_recoverable_revenue /
-            overview.revenue_at_risk) *
-          100
-        ).toFixed(1)}%`
-      : "—"
-  }
-  change="Calculated"
-  positive
-/>
-
-              <Metric
-  label="Active actions"
-  value={
-    overview
-      ? overview.high_recovery_cases +
-        overview.medium_recovery_cases +
-        overview.low_recovery_cases
-      : "—"
-  }
-  change={
-    overview
-      ? `${overview.high_recovery_cases} high priority`
-      : "Loading"
-  }
-  positive
-/>
+              label="Revenue at risk"
+              value={
+                <>
+                  ₹
+                  {overviewLoading ? (
+                    <span className="inline-block h-8 w-28 animate-pulse rounded bg-white/[0.08]" />
+                  ) : (
+                    <AnimatedNumber target={overview?.revenue_at_risk ?? 0} />
+                  )}
+                </>
+              }
+              change="Live"
+              positive={false}
+              large
+            />
+            <Metric
+              label="Expected recoverable"
+              value={
+                <>
+                  ₹
+                  {overviewLoading ? (
+                    <span className="inline-block h-7 w-24 animate-pulse rounded bg-white/[0.08]" />
+                  ) : (
+                    <AnimatedNumber
+                      target={overview?.expected_recoverable_revenue ?? 0}
+                    />
+                  )}
+                </>
+              }
+              change="Live"
+              positive
+            />
+            <Metric
+              label="Recovery rate"
+              value={
+                overview && overview.revenue_at_risk > 0
+                  ? `${(
+                      (overview.expected_recoverable_revenue /
+                        overview.revenue_at_risk) *
+                      100
+                    ).toFixed(1)}%`
+                  : "—"
+              }
+              change="Calculated"
+              positive
+            />
+            <Metric
+              label="Active actions"
+              value={
+                overview
+                  ? overview.high_recovery_cases +
+                    overview.medium_recovery_cases +
+                    overview.low_recovery_cases
+                  : "—"
+              }
+              change={
+                overview
+                  ? `${overview.high_recovery_cases} high priority`
+                  : "Loading"
+              }
+              positive
+            />
             {/* CHART + AI */}
             <div className="grid gap-6 xl:grid-cols-[1.65fr_0.85fr]">
               {/* CHART */}
@@ -691,9 +690,9 @@ const [executionResult, setExecutionResult] = useState<any>(null);
                   <button
                     key={payment.recovery_id}
                     onClick={() => {
-  setSelectedPayment(payment);
-  fetchAIRecommendation(payment.payment_id);
-}}
+                      setSelectedPayment(payment);
+                      fetchAIRecommendation(payment.payment_id);
+                    }}
                     className="group grid w-full grid-cols-[1fr_auto] gap-4 p-5 text-left transition-colors hover:bg-white/[0.025] sm:grid-cols-[1fr_1fr_auto_auto] sm:items-center sm:px-6"
                   >
                     <div>
@@ -815,68 +814,187 @@ const [executionResult, setExecutionResult] = useState<any>(null);
               />
 
               <DetailRow
-  label="Recovery probability"
-  value={
-    aiLoading
-      ? "Analyzing..."
-      : aiRecommendation?.recommendation?.recovery_probability != null
-        ? `${Math.round(
-            aiRecommendation.recommendation.recovery_probability * 100
-          )}%`
-        : selectedPayment.probability !== null
-          ? `${Math.round(selectedPayment.probability * 100)}%`
-          : "Not available"
-  }
-/>
+                label="Recovery probability"
+                value={
+                  aiLoading
+                    ? "Analyzing..."
+                    : aiRecommendation?.recommendation?.recovery_probability != null
+                      ? `${Math.round(
+                          aiRecommendation.recommendation.recovery_probability * 100
+                        )}%`
+                      : selectedPayment.probability !== null
+                        ? `${Math.round(selectedPayment.probability * 100)}%`
+                        : "Not available"
+                }
+              />
 
-             <DetailRow
-  label="Recommendation"
-  value={
-    aiLoading
-      ? "Analyzing..."
-      : aiRecommendation?.recommendation?.recommended_action ??
-        selectedPayment.action ??
-        "Not available"
-  }
-/>
+              <DetailRow
+                label="Recommendation"
+                value={
+                  aiLoading
+                    ? "Analyzing..."
+                    : aiRecommendation?.recommendation?.recommended_action ??
+                      selectedPayment.action ??
+                      "Not available"
+                }
+              />
 
-             <DetailRow
-  label="Policy"
-  value={
-    aiLoading
-      ? "Evaluating..."
-      : aiRecommendation?.policy?.decision ??
-        selectedPayment.policy_decision ??
-        "Not available"
-  }
-/>
+              <DetailRow
+                label="Policy"
+                value={
+                  aiLoading
+                    ? "Evaluating..."
+                    : aiRecommendation?.policy?.decision ??
+                      selectedPayment.policy_decision ??
+                      "Not available"
+                }
+              />
             </div>
 
             <div className="mt-8 rounded-xl border border-white/[0.07] bg-white/[0.025] p-5">
-              <div className="mb-3 flex items-center gap-2">
+              <div className="mb-4 flex items-center gap-2">
+                <span className="text-[13px]">✦</span>
+                <span className="text-[12px] font-medium">
+                  AI decision
+                </span>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <div className="text-[9px] uppercase tracking-[0.12em] text-white/25">
+                    Diagnosis
+                  </div>
+
+                  <p className="mt-1 text-[11px] leading-5 text-white/55">
+                    {aiLoading
+                      ? "RecoverX is analyzing the payment..."
+                      : aiRecommendation?.recommendation?.diagnosis ??
+                        "Not available"}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <div className="text-[9px] uppercase tracking-[0.12em] text-white/25">
+                      Confidence
+                    </div>
+
+                    <div className="mt-1 text-[12px] text-white/65">
+                      {aiLoading
+                        ? "..."
+                        : aiRecommendation?.recommendation?.confidence != null
+                          ? `${Math.round(
+                              aiRecommendation.recommendation.confidence * 100
+                            )}%`
+                          : "Not available"}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-[9px] uppercase tracking-[0.12em] text-white/25">
+                      Retry after
+                    </div>
+
+                    <div className="mt-1 text-[12px] text-white/65">
+                      {aiLoading
+                        ? "..."
+                        : aiRecommendation?.recommendation?.retry_after_hours != null
+                          ? `${aiRecommendation.recommendation.retry_after_hours}h`
+                          : "Not applicable"}
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-[9px] uppercase tracking-[0.12em] text-white/25">
+                    Explanation
+                  </div>
+
+                  <p className="mt-1 text-[11px] leading-5 text-white/40">
+                    {aiLoading
+                      ? "RecoverX is evaluating the safest recovery action..."
+                      : aiRecommendation?.recommendation?.explanation ??
+                        "Not available"}
+                  </p>
+                </div>
+              </div>
+            </div>
+            {aiRecommendation?.audits?.length > 0 && (
+              <div className="mt-6 rounded-xl border border-white/[0.07] bg-white/[0.025] p-5">
+                <div className="mb-4 flex items-center justify-between">
+                  <div>
+                    <div className="text-[12px] font-medium">
+                      Audit timeline
+                    </div>
+
+                    <div className="mt-1 text-[10px] text-white/25">
+                      Every decision is recorded.
+                    </div>
+                  </div>
+
+                  <span className="text-[9px] uppercase tracking-[0.12em] text-white/20">
+                    {aiRecommendation.audits.length} events
+                  </span>
+                </div>
+
+                <div className="space-y-4">
+                  {aiRecommendation.audits.map(
+                    (
+                      event: {
+                        id: number;
+                        event_type: string;
+                        description: string;
+                        timestamp: string;
+                      },
+                      index: number
+                    ) => (
+                      <div key={event.id} className="relative pl-5">
+                        {index < aiRecommendation.audits.length - 1 && (
+                          <div className="absolute left-[3px] top-3 h-full w-px bg-white/[0.08]" />
+                        )}
+
+                        <div className="absolute left-0 top-1.5 h-[7px] w-[7px] rounded-full bg-white/60" />
+
+                        <div className="text-[9px] uppercase tracking-[0.1em] text-white/25">
+                          {event.event_type.replaceAll("_", " ")}
+                        </div>
+
+                        <p className="mt-1 text-[10px] leading-5 text-white/40">
+                          {event.description}
+                        </p>
+
+                        <div className="mt-1 text-[9px] text-white/20">
+                          {new Date(event.timestamp).toLocaleString()}
+                        </div>
+                      </div>
+                    )
+                  )}
+                </div>
+              </div>
+            )}
+            <div className="mt-6 rounded-xl border border-white/[0.07] bg-white/[0.025] p-5">
+              <div className="mb-4 flex items-center gap-2">
                 <span className="text-[13px]">✦</span>
                 <span className="text-[12px] font-medium">
                   Why RecoverX chose this
-                  <p className="text-[11px] leading-5 text-white/40">
-  {aiLoading
-    ? "RecoverX is analyzing the payment context and evaluating the best recovery action..."
-    : aiRecommendation?.policy?.reason ??
-      "The recommendation combines payment context, customer reliability, previous attempts and historical recovery experience. The policy engine determines whether the proposed action is allowed."}
-</p>
                 </span>
               </div>
 
               <p className="text-[11px] leading-5 text-white/40">
-                The recommendation combines payment context, customer
-                reliability, previous attempts and historical recovery
-                experience. The policy engine determines whether the proposed
-                action is allowed.
+                {aiLoading
+                  ? "RecoverX is analyzing the payment context and evaluating the best recovery action..."
+                  : aiRecommendation?.policy?.reason ??
+                    "The recommendation combines payment context, customer reliability, previous attempts and historical recovery experience. The policy engine determines whether the proposed action is allowed."}
               </p>
             </div>
 
             {selectedPayment.status === "Ready" && (
-              <button className="mt-6 w-full rounded-lg bg-white py-3 text-[12px] font-semibold text-black transition hover:bg-white/90 active:scale-[0.99]">
-                Execute recovery →
+              <button
+                onClick={() => executeRecovery(selectedPayment.recovery_id)}
+                disabled={executionLoading}
+                className="mt-6 w-full rounded-lg bg-white py-3 text-[12px] font-semibold text-black transition hover:bg-white/90 active:scale-[0.99] disabled:opacity-50"
+              >
+                {executionLoading ? "Executing..." : "Execute recovery →"}
               </button>
             )}
           </div>

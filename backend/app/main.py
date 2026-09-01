@@ -150,60 +150,6 @@ def risk_overview(db: Session = Depends(get_db)):
 
     return result
 
-
-@app.get("/recovery/queue")
-def recovery_queue(db: Session = Depends(get_db)):
-    recoveries = (
-        db.query(RecoveryAttempt)
-        .order_by(RecoveryAttempt.id.desc())
-        .all()
-    )
-
-    queue = []
-
-    for recovery in recoveries:
-        payment = (
-            db.query(Payment)
-            .filter(Payment.id == recovery.payment_id)
-            .first()
-        )
-
-        if payment is None:
-            continue
-
-        customer = (
-            db.query(Customer)
-            .filter(Customer.id == payment.customer_id)
-            .first()
-        )
-
-        if customer is None:
-            continue
-
-        if recovery.policy_decision == "APPROVE":
-            status = "Ready"
-        else:
-            status = "Review"
-
-        queue.append({
-            "recovery_id": recovery.id,
-            "payment_id": payment.id,
-            "customer": customer.name,
-            "amount": payment.amount,
-            "reason": payment.failure_reason,
-            "probability": recovery.ai_probability,
-            "action": recovery.recommended_action,
-            "policy": recovery.policy_decision,
-            "execution_result": recovery.execution_result,
-            "status": status,
-            "timestamp": recovery.timestamp
-        })
-
-    return {
-        "count": len(queue),
-        "queue": queue
-    }
-
 @app.get("/ai/context/{payment_id}")
 def get_ai_context(
     payment_id: int,
@@ -295,9 +241,17 @@ def get_groq_recommendation(
 
     recovery = RecoveryAttempt(
         payment_id=payment.id,
+
+        # AI decision
         ai_probability=recommendation.recovery_probability,
+        confidence  =recommendation.confidence,
+        diagnosis=recommendation.diagnosis,
+        explanation=recommendation.explanation,
+        retry_after_hours=recommendation.retry_after_hours,
         recommended_action=recommendation.recommended_action,
+        # Deterministic policy decision
         policy_decision=policy_decision.decision,
+        # Execution outcome
         execution_result="pending",
         recovered_amount=0.0,
         timestamp=datetime.now().isoformat()
@@ -312,19 +266,41 @@ def get_groq_recommendation(
     # ---------------------------------------------
 
     audit = AuditEvent(
-        recovery_attempt_id=recovery.id,
-        event_type="policy_evaluated",
-        description=(
-            f"RecoverX policy decision: "
-            f"{policy_decision.decision}. "
-            f"{policy_decision.reason}"
-        ),
-        timestamp=datetime.now().isoformat()
+    recovery_attempt_id=recovery.id,
+    event_type="ai_decision",
+    description=(
+        f"AI diagnosis: {recommendation.diagnosis} "
+        f"Recovery probability: "
+        f"{recommendation.recovery_probability:.2f}. "
+        f"Confidence: {recommendation.confidence:.2f}. "
+        f"Recommended action: "
+        f"{recommendation.recommended_action}. "
+        f"Retry after: "
+        f"{recommendation.retry_after_hours} hours. "
+        f"Explanation: {recommendation.explanation}"
+    ),
+    timestamp=datetime.now().isoformat()
     )
 
     db.add(audit)
     db.commit()
     db.refresh(audit)
+
+
+    policy_audit = AuditEvent(
+    recovery_attempt_id=recovery.id,
+    event_type="policy_evaluated",
+    description=(
+        f"RecoverX policy decision: "
+        f"{policy_decision.decision}. "
+        f"{policy_decision.reason}"
+    ),
+    timestamp=datetime.now().isoformat()
+)
+
+    db.add(policy_audit)
+    db.commit()
+    db.refresh(policy_audit)
 
     # ---------------------------------------------
     # 6. Return complete decision
@@ -349,11 +325,18 @@ def get_groq_recommendation(
             "recovered_amount": recovery.recovered_amount
         },
 
-        "audit": {
-            "id": audit.id,
-            "event_type": audit.event_type,
-            "description": audit.description
-        }
+        "audits": [
+    {
+        "id": audit.id,
+        "event_type": audit.event_type,
+        "description": audit.description
+    },
+    {
+        "id": policy_audit.id,
+        "event_type": policy_audit.event_type,
+        "description": policy_audit.description
+    }
+]
     }
 
 @app.post("/recovery/execute/{recovery_id}")
@@ -519,4 +502,43 @@ def recovery_queue(db: Session = Depends(get_db)):
     return {
         "count": len(queue),
         "queue": queue
+    }
+
+@app.get("/audit/recovery/{recovery_id}")
+def get_recovery_audit(
+    recovery_id: int,
+    db: Session = Depends(get_db)
+):
+    recovery = (
+        db.query(RecoveryAttempt)
+        .filter(RecoveryAttempt.id == recovery_id)
+        .first()
+    )
+
+    if recovery is None:
+        return {
+            "error": "Recovery attempt not found"
+        }
+
+    events = (
+        db.query(AuditEvent)
+        .filter(
+            AuditEvent.recovery_attempt_id == recovery_id
+        )
+        .order_by(AuditEvent.id.asc())
+        .all()
+    )
+
+    return {
+        "recovery_id": recovery_id,
+        "count": len(events),
+        "events": [
+            {
+                "id": event.id,
+                "event_type": event.event_type,
+                "description": event.description,
+                "timestamp": event.timestamp
+            }
+            for event in events
+        ]
     }
