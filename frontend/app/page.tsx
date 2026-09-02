@@ -89,18 +89,16 @@ function AnimatedNumber({
 
 export default function Home() {
   const [active, setActive] = useState("Overview");
-
-  const [payments, setPayments] =
-    useState<RecoveryPayment[]>([]);
-
-  const [queueFilter, setQueueFilter] =
-    useState("All");
-
+  const [payments, setPayments] = useState<RecoveryPayment[]>([]);
+  const [queueFilter, setQueueFilter] = useState("All");
   const [selectedPayment, setSelectedPayment] =
     useState<RecoveryPayment | null>(null);
 
   const [overviewLoading, setOverviewLoading] = useState(true);
   const [overview, setOverview] = useState<any>(null);
+
+  const [evaluationMetrics, setEvaluationMetrics] = useState<any>(null);
+  const [evaluationLoading, setEvaluationLoading] = useState(true);
 
   const [aiRecommendation, setAiRecommendation] = useState<any>(null);
   const [aiLoading, setAiLoading] = useState(false);
@@ -161,6 +159,35 @@ export default function Home() {
 
     fetchOverview();
   }, []);
+
+  useEffect(() => {
+  async function fetchEvaluationMetrics() {
+    try {
+      setEvaluationLoading(true);
+
+      const response = await fetch(
+        "http://127.0.0.1:8000/evaluation/metrics"
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch evaluation metrics");
+      }
+
+      const data = await response.json();
+
+      setEvaluationMetrics(data);
+    } catch (error) {
+      console.error(
+        "[browser] RecoverX evaluation metrics error:",
+        error
+      );
+    } finally {
+      setEvaluationLoading(false);
+    }
+  }
+
+  fetchEvaluationMetrics();
+}, []);
 
   async function fetchAIRecommendation(paymentId: number) {
     try {
@@ -329,9 +356,11 @@ export default function Home() {
 
                   <span>{item.name}</span>
 
-                  {item.name === "Recovery" && (
+                  {item.name === "Recovery" && payments.length > 0 && (
                     <span className="ml-auto rounded-full bg-emerald-400/10 px-1.5 py-0.5 text-[9px] text-emerald-300">
-                      24
+                      {payments.filter(
+                        (payment) => payment.execution_result === "pending"
+                      ).length}
                     </span>
                   )}
                 </button>
@@ -396,375 +425,525 @@ export default function Home() {
           </header>
 
           <div className="mx-auto max-w-[1450px] px-6 py-8 lg:px-10 lg:py-10">
-            {/* INTRO */}
-            <div className="mb-10 flex flex-col justify-between gap-5 md:flex-row md:items-end">
-              <div>
-                <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.16em] text-white/30">
-                  Sunday · August 31
-                </p>
-
-                <h1 className="text-[30px] font-semibold tracking-[-0.04em] sm:text-[38px]">
-                  Revenue, recovered.
-                </h1>
-
-                <p className="mt-2 max-w-lg text-[13px] leading-6 text-white/40">
-                  RecoverX is watching failed payments, understanding why they
-                  failed, and finding the safest way to recover them.
-                </p>
-              </div>
-
-              <button className="group flex w-fit items-center gap-2 rounded-lg border border-white/[0.1] bg-white/[0.035] px-4 py-2.5 text-[12px] font-medium transition-all hover:border-white/20 hover:bg-white/[0.06]">
-                View recovery queue
-                <span className="transition-transform duration-200 group-hover:translate-x-1">
-                  →
-                </span>
-              </button>
-            </div>
-
-            {/* KPI ROW */}
-            <Metric
-              label="Revenue at risk"
-              value={
-                <>
-                  ₹
-                  {overviewLoading ? (
-                    <span className="inline-block h-8 w-28 animate-pulse rounded bg-white/[0.08]" />
-                  ) : (
-                    <AnimatedNumber target={overview?.revenue_at_risk ?? 0} />
-                  )}
-                </>
-              }
-              change="Live"
-              positive={false}
-              large
-            />
-            <Metric
-              label="Expected recoverable"
-              value={
-                <>
-                  ₹
-                  {overviewLoading ? (
-                    <span className="inline-block h-7 w-24 animate-pulse rounded bg-white/[0.08]" />
-                  ) : (
-                    <AnimatedNumber
-                      target={overview?.expected_recoverable_revenue ?? 0}
-                    />
-                  )}
-                </>
-              }
-              change="Live"
-              positive
-            />
-            <Metric
-              label="Recovery rate"
-              value={
-                overview && overview.revenue_at_risk > 0
-                  ? `${(
-                      (overview.expected_recoverable_revenue /
-                        overview.revenue_at_risk) *
-                      100
-                    ).toFixed(1)}%`
-                  : "—"
-              }
-              change="Calculated"
-              positive
-            />
-            <Metric
-              label="Active actions"
-              value={
-                overview
-                  ? overview.high_recovery_cases +
-                    overview.medium_recovery_cases +
-                    overview.low_recovery_cases
-                  : "—"
-              }
-              change={
-                overview
-                  ? `${overview.high_recovery_cases} high priority`
-                  : "Loading"
-              }
-              positive
-            />
-            {/* CHART + AI */}
-            <div className="grid gap-6 xl:grid-cols-[1.65fr_0.85fr]">
-              {/* CHART */}
-              <section className="rounded-xl border border-white/[0.07] bg-white/[0.018] p-5 sm:p-6">
-                <div className="mb-8 flex items-start justify-between">
+            {/* OVERVIEW TAB */}
+            {active === "Overview" && (
+              <>
+                {/* INTRO */}
+                <div className="mb-10 flex flex-col justify-between gap-5 md:flex-row md:items-end">
                   <div>
-                    <h2 className="text-[14px] font-medium">
-                      Recovery performance
-                    </h2>
-                    <p className="mt-1 text-[11px] text-white/30">
-                      Recovered revenue over the last 7 days
+                    <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.16em] text-white/30">
+                      Sunday · August 31
+                    </p>
+
+                    <h1 className="text-[30px] font-semibold tracking-[-0.04em] sm:text-[38px]">
+                      Revenue, recovered.
+                    </h1>
+
+                    <p className="mt-2 max-w-lg text-[13px] leading-6 text-white/40">
+                      RecoverX is watching failed payments, understanding why they
+                      failed, and finding the safest way to recover them.
                     </p>
                   </div>
 
-                  <button className="rounded-md border border-white/[0.08] px-2.5 py-1.5 text-[10px] text-white/45 hover:text-white">
-                    7 days
+                  <button 
+                    onClick={() => setActive("Recovery")}
+                    className="group flex w-fit items-center gap-2 rounded-lg border border-white/[0.1] bg-white/[0.035] px-4 py-2.5 text-[12px] font-medium transition-all hover:border-white/20 hover:bg-white/[0.06]">
+                    View recovery queue
+                    <span className="transition-transform duration-200 group-hover:translate-x-1">
+                      →
+                    </span>
                   </button>
                 </div>
 
-                <div className="h-[290px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart
-                      data={recoveryData}
-                      margin={{ top: 10, right: 5, left: -15, bottom: 0 }}
-                    >
-                      <defs>
-                        <linearGradient
-                          id="recoverGradient"
-                          x1="0"
-                          y1="0"
-                          x2="0"
-                          y2="1"
-                        >
-                          <stop
-                            offset="0%"
-                            stopColor="#8ee6bd"
-                            stopOpacity={0.2}
-                          />
-                          <stop
-                            offset="100%"
-                            stopColor="#8ee6bd"
-                            stopOpacity={0}
-                          />
-                        </linearGradient>
-                      </defs>
-
-                      <XAxis
-                        dataKey="day"
-                        axisLine={false}
-                        tickLine={false}
-                        tick={{ fill: "#ffffff45", fontSize: 10 }}
-                      />
-
-                      <YAxis
-                        axisLine={false}
-                        tickLine={false}
-                        tick={{ fill: "#ffffff30", fontSize: 10 }}
-                        tickFormatter={(value) => `₹${value / 1000}k`}
-                      />
-
-                      <Tooltip
-                        contentStyle={{
-                          background: "#151718",
-                          border: "1px solid rgba(255,255,255,.1)",
-                          borderRadius: "8px",
-                          fontSize: "11px",
-                        }}
-                        formatter={(value) => [
-                          formatMoney(Number(value)),
-                          "Recovered",
-                        ]}
-                      />
-
-                      <Area
-                        type="monotone"
-                        dataKey="recovered"
-                        stroke="#8ee6bd"
-                        strokeWidth={2}
-                        fill="url(#recoverGradient)"
-                        animationDuration={1200}
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </section>
-
-              {/* AI PANEL */}
-              <section className="relative overflow-hidden rounded-xl border border-white/[0.07] bg-[#111314] p-6">
-                <div className="absolute right-[-80px] top-[-80px] h-40 w-40 rounded-full bg-emerald-300/[0.06] blur-[70px]" />
-
-                <div className="relative">
-                  <div className="mb-8 flex items-center justify-between">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[14px]">✦</span>
+                {/* KPI ROW */}
+                <Metric
+                  label="Revenue at risk"
+                  value={
+                    <>
+                      ₹
+                      {overviewLoading ? (
+                        <span className="inline-block h-8 w-28 animate-pulse rounded bg-white/[0.08]" />
+                      ) : (
+                        <AnimatedNumber target={overview?.revenue_at_risk ?? 0} />
+                      )}
+                    </>
+                  }
+                  change="Live"
+                  positive={false}
+                  large
+                />
+                <Metric
+                  label="Expected recoverable"
+                  value={
+                    <>
+                      ₹
+                      {overviewLoading ? (
+                        <span className="inline-block h-7 w-24 animate-pulse rounded bg-white/[0.08]" />
+                      ) : (
+                        <AnimatedNumber
+                          target={overview?.expected_recoverable_revenue ?? 0}
+                        />
+                      )}
+                    </>
+                  }
+                  change="Live"
+                  positive
+                />
+                <Metric
+                      label="Recovery rate"
+                    value={
+                        evaluationLoading
+                        ? "—"
+                      : evaluationMetrics?.revenue_metrics?.revenue_recovery_rate != null
+                      ? `${(
+                       evaluationMetrics.revenue_metrics.revenue_recovery_rate * 100
+                       ).toFixed(1)}%`
+                       : "—"
+                      }
+                 change="Actual"
+                   positive
+                />
+                <Metric
+                  label="Active actions"
+                  value={
+                    payments.length > 0
+                      ? payments.filter(
+                          (payment) => payment.execution_result === "pending"
+                        ).length
+                      : "—"
+                  }
+                  change={
+                    payments.length > 0
+                      ? `${payments.filter(
+                          (payment) => payment.execution_result === "pending"
+                        ).length} pending`
+                      : "Loading"
+                  }
+                  positive
+                />
+                {/* CHART + AI */}
+                <div className="grid gap-6 xl:grid-cols-[1.65fr_0.85fr]">
+                  {/* CHART */}
+                  <section className="rounded-xl border border-white/[0.07] bg-white/[0.018] p-5 sm:p-6">
+                    <div className="mb-8 flex items-start justify-between">
+                      <div>
                         <h2 className="text-[14px] font-medium">
-                          AI recommendation
+                          Recovery performance
                         </h2>
+                        <p className="mt-1 text-[11px] text-white/30">
+                          Recovered revenue over the last 7 days
+                        </p>
                       </div>
 
+                      <button className="rounded-md border border-white/[0.08] px-2.5 py-1.5 text-[10px] text-white/45 hover:text-white">
+                        7 days
+                      </button>
+                    </div>
+
+                    <div className="h-[290px] w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart
+                          data={recoveryData}
+                          margin={{ top: 10, right: 5, left: -15, bottom: 0 }}
+                        >
+                          <defs>
+                            <linearGradient
+                              id="recoverGradient"
+                              x1="0"
+                              y1="0"
+                              x2="0"
+                              y2="1"
+                            >
+                              <stop
+                                offset="0%"
+                                stopColor="#8ee6bd"
+                                stopOpacity={0.2}
+                              />
+                              <stop
+                                offset="100%"
+                                stopColor="#8ee6bd"
+                                stopOpacity={0}
+                              />
+                            </linearGradient>
+                          </defs>
+
+                          <XAxis
+                            dataKey="day"
+                            axisLine={false}
+                            tickLine={false}
+                            tick={{ fill: "#ffffff45", fontSize: 10 }}
+                          />
+
+                          <YAxis
+                            axisLine={false}
+                            tickLine={false}
+                            tick={{ fill: "#ffffff30", fontSize: 10 }}
+                            tickFormatter={(value) => `₹${value / 1000}k`}
+                          />
+
+                          <Tooltip
+                            contentStyle={{
+                              background: "#151718",
+                              border: "1px solid rgba(255,255,255,.1)",
+                              borderRadius: "8px",
+                              fontSize: "11px",
+                            }}
+                            formatter={(value) => [
+                              formatMoney(Number(value)),
+                              "Recovered",
+                            ]}
+                          />
+
+                          <Area
+                            type="monotone"
+                            dataKey="recovered"
+                            stroke="#8ee6bd"
+                            strokeWidth={2}
+                            fill="url(#recoverGradient)"
+                            animationDuration={1200}
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </section>
+
+                  {/* AI PANEL */}
+                  <section className="relative overflow-hidden rounded-xl border border-white/[0.07] bg-[#111314] p-6">
+                    <div className="absolute right-[-80px] top-[-80px] h-40 w-40 rounded-full bg-emerald-300/[0.06] blur-[70px]" />
+
+                    <div className="relative">
+                      <div className="mb-8 flex items-center justify-between">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[14px]">✦</span>
+                            <h2 className="text-[14px] font-medium">
+                              AI recommendation
+                            </h2>
+                          </div>
+
+                          <p className="mt-1 text-[11px] text-white/30">
+                            Latest case evaluated
+                          </p>
+                        </div>
+
+                        <span className="rounded-full border border-emerald-400/15 bg-emerald-400/[0.06] px-2.5 py-1 text-[9px] text-emerald-300">
+                          87% confidence
+                        </span>
+                      </div>
+
+                      <div className="mb-5">
+                        <div className="mb-1 text-[10px] uppercase tracking-[0.14em] text-white/25">
+                          Payment #1842
+                        </div>
+
+                        <div className="text-[28px] font-semibold tracking-[-0.04em]">
+                          ₹4,999
+                        </div>
+
+                        <div className="mt-1 text-[11px] text-white/35">
+                          Insufficient funds · historically reliable customer
+                        </div>
+                      </div>
+
+                      <div className="mb-6 rounded-lg border border-white/[0.06] bg-black/20 p-4">
+                        <div className="mb-2 text-[10px] uppercase tracking-[0.12em] text-white/25">
+                          Diagnosis
+                        </div>
+
+                        <p className="text-[12px] leading-5 text-white/65">
+                          The customer has a strong successful-payment history.
+                          Waiting before another attempt gives the payment a better
+                          chance of succeeding.
+                        </p>
+                      </div>
+
+                      <div className="mb-6 flex items-center justify-between border-b border-white/[0.06] pb-5">
+                        <div>
+                          <div className="text-[10px] text-white/25">
+                            Recommended action
+                          </div>
+                          <div className="mt-1 text-[13px] font-medium">
+                            Retry after 6 hours
+                          </div>
+                        </div>
+
+                        <span className="text-[18px] text-emerald-300">→</span>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-[10px] text-white/25">
+                            Policy decision
+                          </div>
+                          <div className="mt-1 flex items-center gap-1.5 text-[11px] text-emerald-300">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                            Approved
+                          </div>
+                        </div>
+
+                        <button className="rounded-lg bg-white px-3.5 py-2 text-[11px] font-semibold text-black transition hover:bg-white/90 active:scale-[0.98]">
+                          Review action
+                        </button>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+
+                {/* FOOTER SIGNAL */}
+                <div className="mt-6 flex flex-col justify-between gap-3 text-[10px] text-white/25 sm:flex-row">
+                  <div>
+                    AI proposes · Policy protects · Outcomes teach
+                  </div>
+
+                  <div className="flex gap-4">
+                    <span>500+ payment events</span>
+                    <span>•</span>
+                    <span>Razorpay Test Mode</span>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* RECOVERY TAB */}
+            {active === "Recovery" && (
+              <div>
+                <div className="mb-8 flex flex-col justify-between gap-5 md:flex-row md:items-end">
+                  <div>
+                    <h1 className="text-[30px] font-semibold tracking-[-0.04em] sm:text-[38px]">
+                      Recovery Queue
+                    </h1>
+                    <p className="mt-2 max-w-lg text-[13px] leading-6 text-white/40">
+                      All payment recovery cases and their current status
+                    </p>
+                  </div>
+                </div>
+
+                {/* EVALUATION */}
+<section className="mt-6 rounded-xl border border-white/[0.07] bg-white/[0.018] p-5 sm:p-6">
+  <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
+    <div>
+      <div className="mb-2 flex items-center gap-2">
+        <span className="text-[13px]">✓</span>
+        <h2 className="text-[14px] font-medium">
+          Policy evaluation
+        </h2>
+      </div>
+
+      <p className="text-[11px] text-white/30">
+        RecoverX policy decisions evaluated against deterministic safety cases.
+      </p>
+    </div>
+
+    <div className="flex items-center gap-8">
+      <div>
+        <div className="text-[9px] uppercase tracking-[0.12em] text-white/25">
+          Accuracy
+        </div>
+
+        <div className="mt-1 text-[22px] font-semibold tracking-[-0.03em]">
+          {evaluationLoading
+            ? "—"
+            : evaluationMetrics?.policy_evaluation?.policy_accuracy != null
+              ? `${Math.round(
+                  evaluationMetrics.policy_evaluation.policy_accuracy * 100
+                )}%`
+              : "—"}
+        </div>
+      </div>
+
+      <div>
+        <div className="text-[9px] uppercase tracking-[0.12em] text-white/25">
+          Cases passed
+        </div>
+
+        <div className="mt-1 text-[22px] font-semibold tracking-[-0.03em]">
+          {evaluationLoading
+            ? "—"
+            : evaluationMetrics?.policy_evaluation
+                ?.passed_cases != null &&
+              evaluationMetrics?.policy_evaluation?.total_cases != null
+              ? `${evaluationMetrics.policy_evaluation.passed_cases}/${evaluationMetrics.policy_evaluation.total_cases}`
+              : "—"}
+        </div>
+      </div>
+
+      <div className="hidden sm:block">
+        <div className="text-[9px] uppercase tracking-[0.12em] text-white/25">
+          Status
+        </div>
+
+        <div className="mt-1 flex items-center gap-1.5 text-[11px] text-emerald-300">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+          {evaluationLoading
+            ? "Loading"
+            : evaluationMetrics?.policy_evaluation?.failed_cases === 0
+              ? "Validated"
+              : "Review required"}
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+                {/* RECOVERY QUEUE */}
+                <section className="overflow-hidden rounded-xl border border-white/[0.07] bg-white/[0.018]">
+                  <div className="flex flex-col justify-between gap-4 border-b border-white/[0.07] p-5 sm:flex-row sm:items-center sm:px-6">
+                    <div>
+                      <h2 className="text-[14px] font-medium">
+                        Recovery queue
+                      </h2>
+
                       <p className="mt-1 text-[11px] text-white/30">
-                        Latest case evaluated
+                        Payments where RecoverX sees a viable recovery path.
                       </p>
                     </div>
 
-                    <span className="rounded-full border border-emerald-400/15 bg-emerald-400/[0.06] px-2.5 py-1 text-[9px] text-emerald-300">
-                      87% confidence
-                    </span>
-                  </div>
-
-                  <div className="mb-5">
-                    <div className="mb-1 text-[10px] uppercase tracking-[0.14em] text-white/25">
-                      Payment #1842
-                    </div>
-
-                    <div className="text-[28px] font-semibold tracking-[-0.04em]">
-                      ₹4,999
-                    </div>
-
-                    <div className="mt-1 text-[11px] text-white/35">
-                      Insufficient funds · historically reliable customer
+                    <div className="flex gap-1 rounded-lg border border-white/[0.07] p-1">
+                      {["All", "Ready", "Review"].map((filter) => (
+                        <button
+                          key={filter}
+                          onClick={() => setQueueFilter(filter)}
+                          className={`rounded-md px-3 py-1.5 text-[10px] ${
+                            queueFilter === filter
+                              ? "bg-white/[0.08] text-white"
+                              : "text-white/35 hover:text-white/70"
+                          }`}
+                        >
+                          {filter}
+                        </button>
+                      ))}
                     </div>
                   </div>
 
-                  <div className="mb-6 rounded-lg border border-white/[0.06] bg-black/20 p-4">
-                    <div className="mb-2 text-[10px] uppercase tracking-[0.12em] text-white/25">
-                      Diagnosis
-                    </div>
+                  <div className="divide-y divide-white/[0.055]">
+                    {payments.filter((payment) => {
+                      if (queueFilter === "All") return true;
+                      return payment.status === queueFilter;
+                    }).map((payment) => (
+                      <button
+                        key={payment.recovery_id}
+                        onClick={() => {
+                          setSelectedPayment(payment);
+                          fetchAIRecommendation(payment.payment_id);
+                        }}
+                        className="group grid w-full grid-cols-[1fr_auto] gap-4 p-5 text-left transition-colors hover:bg-white/[0.025] sm:grid-cols-[1fr_1fr_auto_auto] sm:items-center sm:px-6"
+                      >
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[12px] font-medium">
+                              {payment.payment_id}
+                            </span>
 
-                    <p className="text-[12px] leading-5 text-white/65">
-                      The customer has a strong successful-payment history.
-                      Waiting before another attempt gives the payment a better
-                      chance of succeeding.
-                    </p>
+                            <span className="text-[10px] text-white/25">
+                              {payment.customer}
+                            </span>
+                          </div>
+
+                          <div className="mt-1 text-[10px] text-white/30">
+                            {payment.reason}
+                          </div>
+                        </div>
+
+                        <div className="hidden sm:block">
+                          <div className="text-[12px]">
+                            {formatMoney(payment.amount)}
+                          </div>
+
+                          <div className="mt-1 text-[10px] text-white/25">
+                            {payment.action}
+                          </div>
+                        </div>
+
+                        <div className="hidden text-right sm:block">
+                          <div className="text-[12px] font-medium">
+                            {payment.probability !== null
+                             ? `${Math.round(payment.probability * 100)}%`
+                             : "—"}
+                          </div>
+
+                          <div className="mt-1 text-[9px] text-white/25">
+                            recovery probability
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          <span
+                            className={`rounded-full border px-2 py-1 text-[9px] ${
+                              payment.status === "Ready"
+                                ? "border-emerald-400/15 bg-emerald-400/[0.05] text-emerald-300"
+                                : "border-amber-400/15 bg-amber-400/[0.05] text-amber-300"
+                            }`}
+                          >
+                            {payment.status}
+                          </span>
+
+                          <span className="text-white/20 transition-all group-hover:translate-x-1 group-hover:text-white/70">
+                            →
+                          </span>
+                        </div>
+                      </button>
+                    ))}
                   </div>
+                </section>
+              </div>
+            )}
 
-                  <div className="mb-6 flex items-center justify-between border-b border-white/[0.06] pb-5">
-                    <div>
-                      <div className="text-[10px] text-white/25">
-                        Recommended action
-                      </div>
-                      <div className="mt-1 text-[13px] font-medium">
-                        Retry after 6 hours
-                      </div>
-                    </div>
-
-                    <span className="text-[18px] text-emerald-300">→</span>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-[10px] text-white/25">
-                        Policy decision
-                      </div>
-                      <div className="mt-1 flex items-center gap-1.5 text-[11px] text-emerald-300">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                        Approved
-                      </div>
-                    </div>
-
-                    <button className="rounded-lg bg-white px-3.5 py-2 text-[11px] font-semibold text-black transition hover:bg-white/90 active:scale-[0.98]">
-                      Review action
-                    </button>
-                  </div>
-                </div>
-              </section>
-            </div>
-
-            {/* RECOVERY QUEUE */}
-            <section className="mt-6 overflow-hidden rounded-xl border border-white/[0.07] bg-white/[0.018]">
-              <div className="flex flex-col justify-between gap-4 border-b border-white/[0.07] p-5 sm:flex-row sm:items-center sm:px-6">
-                <div>
-                  <h2 className="text-[14px] font-medium">
-                    Recovery queue
-                  </h2>
-
-                  <p className="mt-1 text-[11px] text-white/30">
-                    Payments where RecoverX sees a viable recovery path.
+            {/* CUSTOMERS TAB */}
+            {active === "Customers" && (
+              <div>
+                <div className="mb-8">
+                  <h1 className="text-[30px] font-semibold tracking-[-0.04em] sm:text-[38px]">
+                    Customers
+                  </h1>
+                  <p className="mt-2 max-w-lg text-[13px] leading-6 text-white/40">
+                    Customer information and recovery history
                   </p>
                 </div>
-
-                <div className="flex gap-1 rounded-lg border border-white/[0.07] p-1">
-                  {["All", "Ready", "Review"].map((filter) => (
-                    <button
-                      key={filter}
-                      className={`rounded-md px-3 py-1.5 text-[10px] ${
-                        queueFilter === filter
-                          ? "bg-white/[0.08] text-white"
-                          : "text-white/35 hover:text-white/70"
-                      }`}
-                    >
-                      {filter}
-                    </button>
-                  ))}
+                <div className="rounded-xl border border-white/[0.07] bg-white/[0.018] p-8">
+                  <p className="text-center text-[14px] text-white/40">
+                    Coming soon - Customer profiles and history
+                  </p>
                 </div>
               </div>
+            )}
 
-              <div className="divide-y divide-white/[0.055]">
-                {payments.filter((payment) => {
-                  if (queueFilter === "All") return true;
-                  return payment.status === queueFilter;
-                }).map((payment) => (
-                  <button
-                    key={payment.recovery_id}
-                    onClick={() => {
-                      setSelectedPayment(payment);
-                      fetchAIRecommendation(payment.payment_id);
-                    }}
-                    className="group grid w-full grid-cols-[1fr_auto] gap-4 p-5 text-left transition-colors hover:bg-white/[0.025] sm:grid-cols-[1fr_1fr_auto_auto] sm:items-center sm:px-6"
-                  >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[12px] font-medium">
-                          {payment.payment_id}
-                        </span>
-
-                        <span className="text-[10px] text-white/25">
-                          {payment.customer}
-                        </span>
-                      </div>
-
-                      <div className="mt-1 text-[10px] text-white/30">
-                        {payment.reason}
-                      </div>
-                    </div>
-
-                    <div className="hidden sm:block">
-                      <div className="text-[12px]">
-                        {formatMoney(payment.amount)}
-                      </div>
-
-                      <div className="mt-1 text-[10px] text-white/25">
-                        {payment.action}
-                      </div>
-                    </div>
-
-                    <div className="hidden text-right sm:block">
-                      <div className="text-[12px] font-medium">
-                        {payment.probability !== null
-                         ? `${Math.round(payment.probability * 100)}%`
-                         : "—"}
-                      </div>
-
-                      <div className="mt-1 text-[9px] text-white/25">
-                        recovery probability
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <span
-                        className={`rounded-full border px-2 py-1 text-[9px] ${
-                          payment.status === "Ready"
-                            ? "border-emerald-400/15 bg-emerald-400/[0.05] text-emerald-300"
-                            : "border-amber-400/15 bg-amber-400/[0.05] text-amber-300"
-                        }`}
-                      >
-                        {payment.status}
-                      </span>
-
-                      <span className="text-white/20 transition-all group-hover:translate-x-1 group-hover:text-white/70">
-                        →
-                      </span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </section>
-
-            {/* FOOTER SIGNAL */}
-            <div className="mt-6 flex flex-col justify-between gap-3 text-[10px] text-white/25 sm:flex-row">
+            {/* AI DECISIONS TAB */}
+            {active === "AI Decisions" && (
               <div>
-                AI proposes · Policy protects · Outcomes teach
+                <div className="mb-8">
+                  <h1 className="text-[30px] font-semibold tracking-[-0.04em] sm:text-[38px]">
+                    AI Decisions
+                  </h1>
+                  <p className="mt-2 max-w-lg text-[13px] leading-6 text-white/40">
+                    All AI recommendations and their outcomes
+                  </p>
+                </div>
+                <div className="rounded-xl border border-white/[0.07] bg-white/[0.018] p-8">
+                  <p className="text-center text-[14px] text-white/40">
+                    Coming soon - AI decision history and analytics
+                  </p>
+                </div>
               </div>
+            )}
 
-              <div className="flex gap-4">
-                <span>500+ payment events</span>
-                <span>•</span>
-                <span>Razorpay Test Mode</span>
+            {/* AUDIT LOG TAB */}
+            {active === "Audit Log" && (
+              <div>
+                <div className="mb-8">
+                  <h1 className="text-[30px] font-semibold tracking-[-0.04em] sm:text-[38px]">
+                    Audit Log
+                  </h1>
+                  <p className="mt-2 max-w-lg text-[13px] leading-6 text-white/40">
+                    Complete audit trail of all system activities
+                  </p>
+                </div>
+                <div className="rounded-xl border border-white/[0.07] bg-white/[0.018] p-8">
+                  <p className="text-center text-[14px] text-white/40">
+                    Coming soon - Comprehensive audit logs
+                  </p>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </section>
       </div>
