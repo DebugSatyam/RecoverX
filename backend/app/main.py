@@ -10,6 +10,11 @@ from .ai_agent import (
     run_groq_ai_agent
 )
 from .policy_engine import evaluate_policy
+from .evaluation import (
+    run_policy_evaluation,
+    calculate_recovery_metrics,
+    calculate_revenue_recovery_metrics,
+)
 from .razorpay_service import razorpay_service  
 from datetime import datetime
 
@@ -541,4 +546,33 @@ def get_recovery_audit(
             }
             for event in events
         ]
+    }
+
+@app.get("/evaluation/metrics")
+def evaluation_metrics(db: Session = Depends(get_db)):
+    recoveries = (
+        db.query(RecoveryAttempt)
+        .all()
+    )
+
+    payments = (
+        db.query(Payment)
+        .all()
+    )
+
+    policy_evaluation = run_policy_evaluation()
+
+    recovery_metrics = calculate_recovery_metrics(
+        recoveries
+    )
+
+    revenue_metrics = calculate_revenue_recovery_metrics(
+        recoveries,
+        payments,
+    )
+
+    return {
+        "policy_evaluation": policy_evaluation,
+        "recovery_metrics": recovery_metrics,
+        "revenue_metrics": revenue_metrics,
     }
