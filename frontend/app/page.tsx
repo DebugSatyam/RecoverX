@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useRef, useEffect, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -9,6 +9,14 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import {
+  answerDatasetQuestion,
+  QueryResult,
+} from "../lib/dataset-query";
+import {
+  parseDataset,
+  UploadedDataset,
+} from "../lib/dataset-parser";
 
 type RecoveryPayment = {
   recovery_id: number;
@@ -146,6 +154,13 @@ export default function Home() {
   const [executionLoading, setExecutionLoading] = useState(false);
   const [executionResult, setExecutionResult] =
     useState<ExecutionResult | null>(null);
+  const [dataset, setDataset] = useState<UploadedDataset | null>(null);
+  const [datasetLoading, setDatasetLoading] = useState(false);
+  const [datasetError, setDatasetError] = useState<string | null>(null);
+  const [queryText, setQueryText] = useState("");
+  const [queryResult, setQueryResult] = useState<QueryResult | null>(null);
+  const [queryError, setQueryError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     async function fetchRecoveryQueue() {
@@ -262,12 +277,37 @@ export default function Home() {
     }
   }
 
+  async function handleDatasetFile(file: File | undefined) {
+    if (!file) return;
+    setDatasetLoading(true);
+    setDatasetError(null);
+    setQueryResult(null);
+    setQueryError(null);
+    try {
+      setDataset(await parseDataset(file));
+    } catch (error) {
+      setDataset(null);
+      setDatasetError(error instanceof Error ? error.message : "Unable to read this file.");
+    } finally {
+      setDatasetLoading(false);
+    }
+  }
+
+  function askDataset() {
+    if (!dataset) return;
+    setQueryError(null);
+    try {
+      setQueryResult(answerDatasetQuestion(dataset, queryText));
+    } catch (error) {
+      setQueryResult(null);
+      setQueryError(error instanceof Error ? error.message : "Unable to answer that question.");
+    }
+  }
+
   const navigation = [
     { name: "Overview", icon: "⌂" },
-    { name: "Recovery", icon: "↗" },
-    { name: "Customers", icon: "○" },
-    { name: "AI Decisions", icon: "✦" },
-    { name: "Audit Log", icon: "≡" },
+    { name: "Recovery Queue", icon: "↗" },
+    { name: "Data / Upload", icon: "↑" },
   ];
 
   async function executeRecovery(recoveryId: number) {
@@ -332,6 +372,7 @@ export default function Home() {
     { day: "Medium", cases: overview?.medium_recovery_cases ?? 0 },
     { day: "Low", cases: overview?.low_recovery_cases ?? 0 },
   ];
+  const featuredPayment = payments[0];
 
   return (
     <main className="min-h-screen bg-[#0b0c0d] text-[#f4f4f2]">
@@ -428,7 +469,7 @@ export default function Home() {
 
                   <span>{item.name}</span>
 
-                  {item.name === "Recovery" && payments.length > 0 && (
+                  {item.name === "Recovery Queue" && payments.length > 0 && (
                     <span className="ml-auto rounded-full bg-emerald-400/10 px-1.5 py-0.5 text-[9px] text-emerald-300">
                       {activeCount}
                     </span>
@@ -449,7 +490,7 @@ export default function Home() {
                 </span>
 
                 <span className="text-[11px] font-medium text-white/70">
-                  Recovery engine
+                  RecoverX engine
                 </span>
               </div>
 
@@ -474,14 +515,14 @@ export default function Home() {
                   {active}
                 </div>
                 <div className="text-[13px] font-medium">
-                  Revenue recovery
+                  AI Revenue Recovery
                 </div>
               </div>
             </div>
 
             <div className="flex items-center gap-3">
               <div className="hidden rounded-full border border-white/[0.08] px-3 py-1.5 text-[10px] text-white/40 sm:block">
-                Test environment
+                Test Environment
               </div>
 
               <button className="flex h-9 w-9 items-center justify-center rounded-full border border-white/[0.08] text-sm text-white/50 transition hover:border-white/20 hover:text-white">
@@ -494,6 +535,19 @@ export default function Home() {
             </div>
           </header>
 
+          <nav className="flex gap-1 overflow-x-auto border-b border-white/[0.06] px-5 py-2 lg:hidden">
+            {navigation.map((item) => (
+              <button
+                key={item.name}
+                type="button"
+                onClick={() => setActive(item.name)}
+                className={`shrink-0 px-3 py-2 text-[10px] ${active === item.name ? "bg-white/[0.08] text-white" : "text-white/40"}`}
+              >
+                {item.name}
+              </button>
+            ))}
+          </nav>
+
           <div className="mx-auto max-w-[1450px] px-6 py-8 lg:px-10 lg:py-10">
             {/* OVERVIEW TAB */}
             {active === "Overview" && (
@@ -502,7 +556,7 @@ export default function Home() {
                 <div className="mb-10 flex flex-col justify-between gap-5 md:flex-row md:items-end">
                   <div>
                     <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.16em] text-white/30">
-                      Sunday · August 31
+                      Live operations
                     </p>
 
                     <h1 className="text-[30px] font-semibold tracking-[-0.04em] sm:text-[38px]">
@@ -516,7 +570,7 @@ export default function Home() {
                   </div>
 
                   <button 
-                    onClick={() => setActive("Recovery")}
+                    onClick={() => setActive("Recovery Queue")}
                     className="group flex w-fit items-center gap-2 rounded-lg border border-white/[0.1] bg-white/[0.035] px-4 py-2.5 text-[12px] font-medium transition-all hover:border-white/20 hover:bg-white/[0.06]">
                     View recovery queue
                     <span className="transition-transform duration-200 group-hover:translate-x-1">
@@ -617,9 +671,7 @@ export default function Home() {
                         </p>
                       </div>
 
-                      <button className="rounded-md border border-white/[0.08] px-2.5 py-1.5 text-[10px] text-white/45 hover:text-white">
-                        7 days
-                      </button>
+                      <span className="text-[10px] uppercase tracking-[0.12em] text-white/25">Live</span>
                     </div>
 
                     <div className="h-[290px] w-full">
@@ -670,10 +722,7 @@ export default function Home() {
                               borderRadius: "8px",
                               fontSize: "11px",
                             }}
-                            formatter={(value) => [
-                              formatMoney(Number(value)),
-                              "Cases",
-                            ]}
+                            formatter={(value) => [Number(value), "Cases"]}
                           />
 
                           <Area
@@ -709,21 +758,25 @@ export default function Home() {
                         </div>
 
                         <span className="rounded-full border border-emerald-400/15 bg-emerald-400/[0.06] px-2.5 py-1 text-[9px] text-emerald-300">
-                          87% confidence
+                          {featuredPayment?.probability != null
+                            ? `${Math.round(featuredPayment.probability * 100)}% probability`
+                            : "Awaiting case"}
                         </span>
                       </div>
 
                       <div className="mb-5">
                         <div className="mb-1 text-[10px] uppercase tracking-[0.14em] text-white/25">
-                          Payment #1842
+                          {featuredPayment ? `Payment #${featuredPayment.payment_id}` : "No case selected"}
                         </div>
 
                         <div className="text-[28px] font-semibold tracking-[-0.04em]">
-                          ₹4,999
+                          {featuredPayment ? formatMoney(featuredPayment.amount) : "—"}
                         </div>
 
                         <div className="mt-1 text-[11px] text-white/35">
-                          Insufficient funds · historically reliable customer
+                          {featuredPayment
+                            ? `${featuredPayment.reason ?? "Unknown failure"} · ${featuredPayment.customer}`
+                            : "Select a recovery case to inspect its recommendation."}
                         </div>
                       </div>
 
@@ -733,9 +786,9 @@ export default function Home() {
                         </div>
 
                         <p className="text-[12px] leading-5 text-white/65">
-                          The customer has a strong successful-payment history.
-                          Waiting before another attempt gives the payment a better
-                          chance of succeeding.
+                          {featuredPayment
+                            ? "RecoverX combines payment context, customer history, and deterministic policy rules before any action is allowed."
+                            : "No recovery case has been evaluated yet."}
                         </p>
                       </div>
 
@@ -745,7 +798,7 @@ export default function Home() {
                             Recommended action
                           </div>
                           <div className="mt-1 text-[13px] font-medium">
-                            Retry after 6 hours
+                            {featuredPayment?.action ?? "No recommendation available"}
                           </div>
                         </div>
 
@@ -758,12 +811,12 @@ export default function Home() {
                             Policy decision
                           </div>
                           <div className="mt-1 flex items-center gap-1.5 text-[11px] text-emerald-300">
-                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                            Approved
+                            <span className={`h-1.5 w-1.5 rounded-full ${featuredPayment?.policy_decision === "APPROVE" ? "bg-emerald-400" : "bg-amber-300"}`} />
+                            {featuredPayment?.policy_decision ?? "Awaiting evaluation"}
                           </div>
                         </div>
 
-                        <button className="rounded-lg bg-white px-3.5 py-2 text-[11px] font-semibold text-black transition hover:bg-white/90 active:scale-[0.98]">
+                        <button onClick={() => setActive("Recovery Queue")} className="rounded-lg bg-white px-3.5 py-2 text-[11px] font-semibold text-black transition hover:bg-white/90 active:scale-[0.98]">
                           Review action
                         </button>
                       </div>
@@ -787,7 +840,7 @@ export default function Home() {
             )}
 
             {/* RECOVERY TAB */}
-            {active === "Recovery" && (
+            {active === "Recovery Queue" && (
               <div>
                 <div className="mb-8 flex flex-col justify-between gap-5 md:flex-row md:items-end">
                   <div>
@@ -881,7 +934,7 @@ export default function Home() {
                     </div>
 
                     <div className="flex gap-1 rounded-lg border border-white/[0.07] p-1">
-                      {["All", "Ready", "Review"].map((filter) => (
+                      { ["All", "Ready", "Review", "Blocked", "Completed", "Failed"].map((filter) => (
                         <button
                           key={filter}
                           onClick={() => setQueueFilter(filter)}
@@ -960,9 +1013,11 @@ export default function Home() {
                         <div className="flex items-center gap-3">
                           <span
                             className={`rounded-full border px-2 py-1 text-[9px] ${
-                              payment.status === "Ready"
+                              payment.status === "Ready" || payment.status === "Completed"
                                 ? "border-emerald-400/15 bg-emerald-400/[0.05] text-emerald-300"
-                                : "border-amber-400/15 bg-amber-400/[0.05] text-amber-300"
+                                : payment.status === "Blocked" || payment.status === "Failed"
+                                  ? "border-red-400/15 bg-red-400/[0.05] text-red-300"
+                                  : "border-amber-400/15 bg-amber-400/[0.05] text-amber-300"
                             }`}
                           >
                             {payment.status}
@@ -975,6 +1030,134 @@ export default function Home() {
                       </button>
                     ))}
                   </div>
+                </section>
+              </div>
+            )}
+
+            {/* DATA / UPLOAD TAB */}
+            {active === "Data / Upload" && (
+              <div>
+                <div className="mb-8 flex flex-col justify-between gap-5 md:flex-row md:items-end">
+                  <div>
+                    <p className="mb-2 text-[10px] font-medium uppercase tracking-[0.16em] text-emerald-300/70">
+                      Data workspace
+                    </p>
+                    <h1 className="text-[30px] font-semibold tracking-[-0.04em] sm:text-[38px]">
+                      Upload data. Ask questions.
+                    </h1>
+                    <p className="mt-2 max-w-xl text-[13px] leading-6 text-white/40">
+                      Analyze a payment or revenue file locally. Answers are calculated from the uploaded rows, not guessed by an AI model.
+                    </p>
+                  </div>
+                  {dataset && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDataset(null);
+                        setQueryResult(null);
+                        setQueryError(null);
+                        if (fileInputRef.current) fileInputRef.current.value = "";
+                      }}
+                      className="w-fit border border-white/[0.1] px-4 py-2.5 text-[11px] text-white/55 transition hover:border-white/25 hover:text-white"
+                    >
+                      Clear dataset
+                    </button>
+                  )}
+                </div>
+
+                <section className="border border-white/[0.08] bg-white/[0.018] p-6 sm:p-8">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".csv,.xlsx"
+                    className="hidden"
+                    onChange={(event) => handleDatasetFile(event.target.files?.[0])}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      void handleDatasetFile(event.dataTransfer.files[0]);
+                    }}
+                    className="flex min-h-[190px] w-full flex-col items-center justify-center border border-dashed border-white/[0.16] bg-black/10 px-6 text-center transition hover:border-emerald-300/40 hover:bg-emerald-300/[0.025]"
+                  >
+                    <span className="mb-4 flex h-10 w-10 items-center justify-center border border-emerald-300/20 text-lg text-emerald-300">
+                      ↑
+                    </span>
+                    <span className="text-[13px] font-medium text-white/80">
+                      {datasetLoading ? "Reading your file..." : "Drop your file here or browse"}
+                    </span>
+                    <span className="mt-2 text-[11px] text-white/35">
+                      CSV or XLSX · Maximum 10 MB
+                    </span>
+                  </button>
+
+                  {datasetError && (
+                    <div className="mt-4 border border-red-400/20 bg-red-400/[0.05] p-3 text-[11px] text-red-200/80">
+                      {datasetError}
+                    </div>
+                  )}
+
+                  {dataset && (
+                    <div className="mt-6 grid gap-6 lg:grid-cols-[0.75fr_1.25fr]">
+                      <div>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="text-[13px] font-medium text-white/85">{dataset.fileName}</div>
+                            <div className="mt-1 text-[11px] text-white/35">
+                              {dataset.rows.length.toLocaleString("en-IN")} records loaded
+                            </div>
+                          </div>
+                          <span className="border border-emerald-400/20 bg-emerald-400/[0.06] px-2 py-1 text-[9px] uppercase tracking-[0.1em] text-emerald-300">
+                            Ready
+                          </span>
+                        </div>
+                        <div className="mt-6 text-[10px] uppercase tracking-[0.12em] text-white/30">Detected columns</div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {dataset.columns.map((column) => (
+                            <span key={column.key} className="border border-white/[0.08] px-2 py-1 text-[10px] text-white/55">
+                              {column.label}
+                            </span>
+                          ))}
+                        </div>
+                        {dataset.warnings.length > 0 && (
+                          <div className="mt-6 border-l-2 border-amber-300/50 pl-3 text-[11px] leading-5 text-amber-100/60">
+                            {dataset.warnings.map((warning) => <div key={warning}>{warning}</div>)}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="border-l border-white/[0.07] pl-0 lg:pl-6">
+                        <div className="text-[10px] uppercase tracking-[0.12em] text-white/30">Ask your data</div>
+                        <p className="mt-2 text-[12px] text-white/45">Try: “What is the total failed revenue?”</p>
+                        <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                          <input
+                            value={queryText}
+                            onChange={(event) => setQueryText(event.target.value)}
+                            onKeyDown={(event) => { if (event.key === "Enter") askDataset(); }}
+                            placeholder="Ask about revenue, failures, or customers"
+                            className="min-w-0 flex-1 border border-white/[0.1] bg-black/20 px-3 py-2.5 text-[12px] text-white outline-none placeholder:text-white/25 focus:border-emerald-300/40"
+                          />
+                          <button type="button" onClick={askDataset} className="bg-white px-4 py-2.5 text-[11px] font-semibold text-black transition hover:bg-emerald-100">
+                            Ask
+                          </button>
+                        </div>
+                        {queryError && <div className="mt-4 text-[11px] text-amber-200/75">{queryError}</div>}
+                        {queryResult && (
+                          <div className="mt-5 border border-emerald-400/15 bg-emerald-400/[0.04] p-4">
+                            <div className="text-[10px] uppercase tracking-[0.12em] text-emerald-300/70">Answer</div>
+                            <div className="mt-2 text-[24px] font-semibold tracking-[-0.03em] text-white">{queryResult.answer}</div>
+                            <div className="mt-3 text-[11px] text-white/45">{queryResult.operation} · {queryResult.rowsUsed.toLocaleString("en-IN")} rows used</div>
+                            <div className="mt-3 space-y-1 text-[11px] leading-5 text-white/55">
+                              {queryResult.supporting.map((item) => <div key={item}>{item}</div>)}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </section>
               </div>
             )}

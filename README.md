@@ -21,6 +21,12 @@ RecoverX detects failed payments, analyzes risk, asks an AI agent for a structur
 - **Razorpay Test Mode adapter**: local prototype execution adapter; it does not perform a production payment retry.
 - **SQLite/SQLAlchemy**: customers, payments, recovery attempts, and audit events.
 
+## Data Intelligence
+
+The **Data / Upload** workspace accepts CSV and XLSX files up to 10 MB. Files are parsed in the browser and are not uploaded to the backend or an external AI provider. RecoverX reports detected columns, row counts, malformed values, and missing recommended fields without silently dropping rows.
+
+Ask Your Data supports deterministic questions about total, successful, failed, and at-risk revenue; failed-payment counts; average amounts; failure-reason revenue; and top customers by failed revenue. Each answer shows the operation and number of rows used. Unsupported questions or missing columns return a clear limitation instead of an invented value.
+
 ## AI
 
 AI receives payment amount, failure state, attempt count, customer history, reliability, lifetime value, and deterministic risk context. It returns validated structured data. AI proposes; it cannot execute payments or bypass policy rules.
@@ -51,6 +57,8 @@ The recovery queue preserves historical attempts. `count` is the historical row 
 - `POST /recovery/execute/{recovery_id}`
 - `GET /audit/recovery/{recovery_id}`
 - `GET /evaluation/metrics`
+
+Data upload and questions are intentionally client-side and do not add a server file-storage endpoint.
 
 ## Setup
 
@@ -97,7 +105,7 @@ Never commit `.env` files or credentials. The frontend only calls the backend an
 
 ## Limitations
 
-The current Razorpay service models a successful or failed Test Mode retry locally and does not call a live payment API. Experience memory is persisted history/context rather than vector retrieval or model retraining. The policy evaluation set is deterministic and small, not a held-out production dataset. Authentication and authorization for multi-user deployment are outside this buildathon prototype.
+The current Razorpay service models a successful or failed Test Mode retry locally and does not call a live payment API. Experience memory is persisted history/context rather than vector retrieval or model retraining. Uploaded datasets are held in the current browser session and are not persisted between reloads. The policy evaluation set is deterministic and small, not a held-out production dataset. Authentication and authorization for multi-user deployment are outside this buildathon prototype.
 
 ## Future Work
 
