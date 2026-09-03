@@ -19,12 +19,27 @@ class PolicyDecision:
 
 def evaluate_policy(
     payment,
-    recommendation
+    recommendation,
+    customer=None,
 ) -> PolicyDecision:
 
     # --------------------------------------------------
     # STOP RULES
     # --------------------------------------------------
+
+    if getattr(payment, "status", "failed") != "failed":
+        return PolicyDecision(
+            decision="STOP",
+            allowed=False,
+            reason="Only failed payments are eligible for recovery.",
+        )
+
+    if getattr(customer, "opted_out", False):
+        return PolicyDecision(
+            decision="STOP",
+            allowed=False,
+            reason="Customer has opted out of recovery attempts.",
+        )
 
     # Rule 1: Retry limit reached
     if payment.attempt_count >= MAX_RETRY_ATTEMPTS:

@@ -182,6 +182,7 @@ def calculate_recovery_metrics(recoveries):
     recovered_revenue = sum(
         recovery.recovered_amount or 0.0
         for recovery in recoveries
+        if recovery.execution_result == "success"
     )
 
     attempted_revenue = sum(
@@ -224,6 +225,8 @@ def calculate_revenue_recovery_metrics(recoveries, payments):
 
     revenue_at_risk = 0.0
     recovered_revenue = 0.0
+    counted_payments = set()
+    counted_recoveries = set()
 
     for recovery in recoveries:
         payment = payment_map.get(recovery.payment_id)
@@ -231,8 +234,16 @@ def calculate_revenue_recovery_metrics(recoveries, payments):
         if payment is None:
             continue
 
-        revenue_at_risk += payment.amount
-        recovered_revenue += recovery.recovered_amount or 0.0
+        if recovery.payment_id not in counted_payments:
+            revenue_at_risk += payment.amount
+            counted_payments.add(recovery.payment_id)
+
+        if (
+            getattr(recovery, "execution_result", None) == "success"
+            and recovery.payment_id not in counted_recoveries
+        ):
+            recovered_revenue += recovery.recovered_amount or 0.0
+            counted_recoveries.add(recovery.payment_id)
 
     recovery_rate = (
         recovered_revenue / revenue_at_risk

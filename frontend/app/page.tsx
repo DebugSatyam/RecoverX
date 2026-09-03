@@ -10,16 +10,6 @@ import {
   YAxis,
 } from "recharts";
 
-const recoveryData = [
-  { day: "Mon", recovered: 28000, risk: 52000 },
-  { day: "Tue", recovered: 41000, risk: 61000 },
-  { day: "Wed", recovered: 36000, risk: 58000 },
-  { day: "Thu", recovered: 63000, risk: 76000 },
-  { day: "Fri", recovered: 58000, risk: 69000 },
-  { day: "Sat", recovered: 82000, risk: 94000 },
-  { day: "Sun", recovered: 96000, risk: 102000 },
-];
-
 type RecoveryPayment = {
   recovery_id: number;
   payment_id: number;
@@ -31,6 +21,13 @@ type RecoveryPayment = {
   status: string;
   policy_decision: string | null;
   execution_result: string | null;
+  active: boolean;
+};
+
+type RecoveryQueueResponse = {
+  count: number;
+  active_count: number;
+  queue: RecoveryPayment[];
 };
 
 function formatMoney(value: number) {
@@ -47,6 +44,44 @@ type RiskOverview = {
   high_recovery_cases: number;
   medium_recovery_cases: number;
   low_recovery_cases: number;
+};
+
+type EvaluationMetrics = {
+  active_recovery_actions: number;
+  revenue_metrics?: {
+    revenue_recovery_rate: number;
+    recovered_revenue: number;
+  };
+  policy_evaluation?: {
+    policy_accuracy: number;
+    passed_cases: number;
+    total_cases: number;
+    failed_cases: number;
+  };
+};
+
+type AIRecommendation = {
+  recommendation?: {
+    recovery_probability?: number;
+    recommended_action?: string;
+    diagnosis?: string;
+    confidence?: number;
+    retry_after_hours?: number | null;
+    explanation?: string;
+  };
+  policy?: { decision?: string; reason?: string };
+  audits?: Array<{
+    id: number;
+    event_type: string;
+    description: string;
+    timestamp: string;
+  }>;
+};
+
+type ExecutionResult = {
+  status: string;
+  message: string;
+  recovered_amount: number;
 };
 
 function AnimatedNumber({
@@ -90,25 +125,33 @@ function AnimatedNumber({
 export default function Home() {
   const [active, setActive] = useState("Overview");
   const [payments, setPayments] = useState<RecoveryPayment[]>([]);
+  const [activeCount, setActiveCount] = useState(0);
+  const [queueLoading, setQueueLoading] = useState(true);
+  const [queueError, setQueueError] = useState<string | null>(null);
   const [queueFilter, setQueueFilter] = useState("All");
   const [selectedPayment, setSelectedPayment] =
     useState<RecoveryPayment | null>(null);
 
   const [overviewLoading, setOverviewLoading] = useState(true);
-  const [overview, setOverview] = useState<any>(null);
+  const [overview, setOverview] = useState<RiskOverview | null>(null);
 
-  const [evaluationMetrics, setEvaluationMetrics] = useState<any>(null);
+  const [evaluationMetrics, setEvaluationMetrics] =
+    useState<EvaluationMetrics | null>(null);
   const [evaluationLoading, setEvaluationLoading] = useState(true);
 
-  const [aiRecommendation, setAiRecommendation] = useState<any>(null);
+  const [aiRecommendation, setAiRecommendation] =
+    useState<AIRecommendation | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
 
   const [executionLoading, setExecutionLoading] = useState(false);
-  const [executionResult, setExecutionResult] = useState<any>(null);
+  const [executionResult, setExecutionResult] =
+    useState<ExecutionResult | null>(null);
 
   useEffect(() => {
     async function fetchRecoveryQueue() {
       try {
+        setQueueLoading(true);
+        setQueueError(null);
         const response = await fetch(
           "http://127.0.0.1:8000/recovery/queue"
         );
@@ -117,14 +160,18 @@ export default function Home() {
           throw new Error("Failed to fetch recovery queue");
         }
 
-        const data = await response.json();
+        const data: RecoveryQueueResponse = await response.json();
 
         setPayments(data.queue);
+        setActiveCount(data.active_count);
       } catch (error) {
         console.error(
           "[browser] RecoverX recovery queue error:",
           error
         );
+        setQueueError("Recovery queue is unavailable.");
+      } finally {
+        setQueueLoading(false);
       }
     }
 
@@ -249,8 +296,21 @@ export default function Home() {
       );
 
       if (queueResponse.ok) {
-        const queueData = await queueResponse.json();
-        setPayments(queueData.queue);
+        const queue: RecoveryQueueResponse = await queueResponse.json();
+        setPayments(queue.queue);
+        setActiveCount(queue.active_count);
+      }
+
+      const [overviewResponse, evaluationResponse] = await Promise.all([
+        fetch("http://127.0.0.1:8000/risk/overview"),
+        fetch("http://127.0.0.1:8000/evaluation/metrics"),
+      ]);
+
+      if (overviewResponse.ok) {
+        setOverview(await overviewResponse.json());
+      }
+      if (evaluationResponse.ok) {
+        setEvaluationMetrics(await evaluationResponse.json());
       }
     } catch (error) {
       console.error(
@@ -261,6 +321,18 @@ export default function Home() {
       setExecutionLoading(false);
     }
   }
+
+  const filteredPayments = payments.filter((payment) => {
+    if (queueFilter === "All") return true;
+    return payment.status === queueFilter;
+  });
+  const auditEvents = aiRecommendation?.audits ?? [];
+  const riskDistribution = [
+    { day: "High", cases: overview?.high_recovery_cases ?? 0 },
+    { day: "Medium", cases: overview?.medium_recovery_cases ?? 0 },
+    { day: "Low", cases: overview?.low_recovery_cases ?? 0 },
+  ];
+
   return (
     <main className="min-h-screen bg-[#0b0c0d] text-[#f4f4f2]">
       {/* Ambient light */}
@@ -358,9 +430,7 @@ export default function Home() {
 
                   {item.name === "Recovery" && payments.length > 0 && (
                     <span className="ml-auto rounded-full bg-emerald-400/10 px-1.5 py-0.5 text-[9px] text-emerald-300">
-                      {payments.filter(
-                        (payment) => payment.execution_result === "pending"
-                      ).length}
+                      {activeCount}
                     </span>
                   )}
                 </button>
@@ -490,6 +560,26 @@ export default function Home() {
                   positive
                 />
                 <Metric
+                  label="Revenue recovered"
+                  value={
+                    evaluationLoading ? (
+                      "—"
+                    ) : (
+                      <>
+                        ₹
+                        <AnimatedNumber
+                          target={
+                            evaluationMetrics?.revenue_metrics
+                              ?.recovered_revenue ?? 0
+                          }
+                        />
+                      </>
+                    )
+                  }
+                  change="Actual"
+                  positive
+                />
+                <Metric
                       label="Recovery rate"
                     value={
                         evaluationLoading
@@ -506,18 +596,10 @@ export default function Home() {
                 <Metric
                   label="Active actions"
                   value={
-                    payments.length > 0
-                      ? payments.filter(
-                          (payment) => payment.execution_result === "pending"
-                        ).length
-                      : "—"
+                    queueLoading ? "—" : activeCount
                   }
                   change={
-                    payments.length > 0
-                      ? `${payments.filter(
-                          (payment) => payment.execution_result === "pending"
-                        ).length} pending`
-                      : "Loading"
+                    queueLoading ? "Loading" : `${activeCount} active`
                   }
                   positive
                 />
@@ -528,10 +610,10 @@ export default function Home() {
                     <div className="mb-8 flex items-start justify-between">
                       <div>
                         <h2 className="text-[14px] font-medium">
-                          Recovery performance
+                          Risk distribution
                         </h2>
                         <p className="mt-1 text-[11px] text-white/30">
-                          Recovered revenue over the last 7 days
+                          Current failed-payment risk classification
                         </p>
                       </div>
 
@@ -543,7 +625,7 @@ export default function Home() {
                     <div className="h-[290px] w-full">
                       <ResponsiveContainer width="100%" height="100%">
                         <AreaChart
-                          data={recoveryData}
+                          data={riskDistribution}
                           margin={{ top: 10, right: 5, left: -15, bottom: 0 }}
                         >
                           <defs>
@@ -578,7 +660,7 @@ export default function Home() {
                             axisLine={false}
                             tickLine={false}
                             tick={{ fill: "#ffffff30", fontSize: 10 }}
-                            tickFormatter={(value) => `₹${value / 1000}k`}
+                            tickFormatter={(value) => `${value}`}
                           />
 
                           <Tooltip
@@ -590,13 +672,13 @@ export default function Home() {
                             }}
                             formatter={(value) => [
                               formatMoney(Number(value)),
-                              "Recovered",
+                              "Cases",
                             ]}
                           />
 
                           <Area
                             type="monotone"
-                            dataKey="recovered"
+                            dataKey="cases"
                             stroke="#8ee6bd"
                             strokeWidth={2}
                             fill="url(#recoverGradient)"
@@ -816,10 +898,19 @@ export default function Home() {
                   </div>
 
                   <div className="divide-y divide-white/[0.055]">
-                    {payments.filter((payment) => {
-                      if (queueFilter === "All") return true;
-                      return payment.status === queueFilter;
-                    }).map((payment) => (
+                    {queueError ? (
+                      <div className="p-8 text-center text-[12px] text-amber-200/70">
+                        {queueError}
+                      </div>
+                    ) : queueLoading ? (
+                      <div className="p-8 text-center text-[12px] text-white/35">
+                        Loading recovery queue...
+                      </div>
+                    ) : filteredPayments.length === 0 ? (
+                      <div className="p-8 text-center text-[12px] text-white/35">
+                        No recovery cases match this filter.
+                      </div>
+                    ) : filteredPayments.map((payment) => (
                       <button
                         key={payment.recovery_id}
                         onClick={() => {
@@ -1098,7 +1189,7 @@ export default function Home() {
                 </div>
               </div>
             </div>
-            {aiRecommendation?.audits?.length > 0 && (
+            {auditEvents.length > 0 && (
               <div className="mt-6 rounded-xl border border-white/[0.07] bg-white/[0.025] p-5">
                 <div className="mb-4 flex items-center justify-between">
                   <div>
@@ -1112,12 +1203,12 @@ export default function Home() {
                   </div>
 
                   <span className="text-[9px] uppercase tracking-[0.12em] text-white/20">
-                    {aiRecommendation.audits.length} events
+                    {auditEvents.length} events
                   </span>
                 </div>
 
                 <div className="space-y-4">
-                  {aiRecommendation.audits.map(
+                  {auditEvents.map(
                     (
                       event: {
                         id: number;
@@ -1128,7 +1219,7 @@ export default function Home() {
                       index: number
                     ) => (
                       <div key={event.id} className="relative pl-5">
-                        {index < aiRecommendation.audits.length - 1 && (
+                        {index < auditEvents.length - 1 && (
                           <div className="absolute left-[3px] top-3 h-full w-px bg-white/[0.08]" />
                         )}
 
@@ -1175,6 +1266,11 @@ export default function Home() {
               >
                 {executionLoading ? "Executing..." : "Execute recovery →"}
               </button>
+            )}
+            {executionResult && (
+              <div className="mt-4 rounded-lg border border-emerald-400/15 bg-emerald-400/[0.05] p-4 text-[11px] text-emerald-200/80">
+                {executionResult.message} Recovered {formatMoney(executionResult.recovered_amount)}.
+              </div>
             )}
           </div>
         </div>

@@ -62,10 +62,12 @@ def test_revenue_recovery_metrics():
     recoveries = [
         SimpleNamespace(
             payment_id=1,
+            execution_result="success",
             recovered_amount=2000.0,
         ),
         SimpleNamespace(
             payment_id=2,
+            execution_result="success",
             recovered_amount=1000.0,
         ),
     ]
@@ -98,8 +100,16 @@ def test_revenue_recovery_metrics_with_missing_payment():
     ]
 
     recoveries = [
-        SimpleNamespace(payment_id=1, recovered_amount=1000.0),
-        SimpleNamespace(payment_id=999, recovered_amount=500.0),
+        SimpleNamespace(
+            payment_id=1,
+            execution_result="success",
+            recovered_amount=1000.0,
+        ),
+        SimpleNamespace(
+            payment_id=999,
+            execution_result="success",
+            recovered_amount=500.0,
+        ),
     ]
 
     metrics = calculate_revenue_recovery_metrics(recoveries, payments)
@@ -107,6 +117,28 @@ def test_revenue_recovery_metrics_with_missing_payment():
     assert metrics["revenue_at_risk"] == 2000.0
     assert metrics["recovered_revenue"] == 1000.0
     assert metrics["revenue_recovery_rate"] == 0.5
+
+
+def test_revenue_metrics_deduplicate_attempt_history():
+    payments = [SimpleNamespace(id=1, amount=2000.0)]
+    recoveries = [
+        SimpleNamespace(
+            payment_id=1,
+            execution_result="failed",
+            recovered_amount=0.0,
+        ),
+        SimpleNamespace(
+            payment_id=1,
+            execution_result="success",
+            recovered_amount=2000.0,
+        ),
+    ]
+
+    metrics = calculate_revenue_recovery_metrics(recoveries, payments)
+
+    assert metrics["revenue_at_risk"] == 2000.0
+    assert metrics["recovered_revenue"] == 2000.0
+    assert metrics["revenue_recovery_rate"] == 1.0
 
 def test_recovery_metrics_do_not_count_failed_or_pending_as_recovered():
     recoveries = [

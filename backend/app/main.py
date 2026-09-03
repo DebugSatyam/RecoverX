@@ -78,7 +78,7 @@ def create_demo_recovery_case(db: Session = Depends(get_db)):
     db.refresh(payment)
 
     recovery = RecoveryAttempt(
-        payment_id=payment.payment_id,
+        payment_id=payment.id,
         ai_probability=0.87,
         recommended_action="delayed_retry",
         policy_decision="APPROVE",
@@ -104,14 +104,14 @@ def create_demo_recovery_case(db: Session = Depends(get_db)):
 
     return {
         "customer_id": customer.id,
-        "payment_id": payment.payment_id,
+        "payment_id": payment.id,
         "recovery_attempt_id": recovery.id,
         "audit_event_id": audit.id
     }
 
 @app.get("/risk/payment/{payment_id}")
 def assess_payment(payment_id: int, db: Session = Depends(get_db)):
-    payment = db.query(Payment).filter(payment.Payment_id == payment_id).first()
+    payment = db.query(Payment).filter(Payment.id == payment_id).first()
 
     if payment is None:
         return {
@@ -237,12 +237,41 @@ def get_groq_recommendation(
 
     policy_decision = evaluate_policy(
         payment,
-        recommendation
+        recommendation,
+        customer,
     )
 
     # ---------------------------------------------
     # 4. Save recovery attempt
     # ---------------------------------------------
+
+    existing_recovery = (
+        db.query(RecoveryAttempt)
+        .filter(
+            RecoveryAttempt.payment_id == payment.id,
+            RecoveryAttempt.execution_result == "pending",
+        )
+        .order_by(RecoveryAttempt.id.desc())
+        .first()
+    )
+
+    if existing_recovery is not None:
+        return {
+            "payment_id": payment.id,
+            "context": context.model_dump(),
+            "recommendation": recommendation.model_dump(),
+            "policy": {
+                "decision": existing_recovery.policy_decision,
+                "allowed": existing_recovery.policy_decision == "APPROVE",
+                "reason": "An active recovery attempt already exists for this payment.",
+            },
+            "recovery_attempt": {
+                "id": existing_recovery.id,
+                "execution_result": existing_recovery.execution_result,
+                "recovered_amount": existing_recovery.recovered_amount,
+            },
+            "audits": [],
+        }
 
     recovery = RecoveryAttempt(
         payment_id=payment.id,
@@ -405,6 +434,13 @@ def execute_recovery(
             "error": "Payment not found"
         }
 
+    if payment.status != "failed":
+        return {
+            "status": "blocked",
+            "reason": "Only failed payments can be recovered.",
+            "recovery_attempt_id": recovery.id,
+        }
+
     # ---------------------------------------------
     # 4. Execute approved recovery
     # ---------------------------------------------
@@ -419,7 +455,13 @@ def execute_recovery(
     # ---------------------------------------------
 
     recovery.execution_result = result["status"]
-    recovery.recovered_amount = result["recovered_amount"]
+    recovery.recovered_amount = (
+        result["recovered_amount"] if result["status"] == "success" else 0.0
+    )
+
+    if result["status"] == "success":
+        payment.status = "recovered"
+        payment.attempt_count += 1
 
     db.commit()
     db.refresh(recovery)
@@ -487,6 +529,17 @@ def recovery_queue(db: Session = Depends(get_db)):
             .first()
         )
 
+        if recovery.execution_result == "success":
+            status = "Completed"
+        elif recovery.execution_result == "failed":
+            status = "Failed"
+        elif recovery.policy_decision == "APPROVE":
+            status = "Ready"
+        elif recovery.policy_decision == "ESCALATE":
+            status = "Review"
+        else:
+            status = "Blocked"
+
         queue.append({
             "recovery_id": recovery.id,
             "payment_id": payment.id,
@@ -495,17 +548,24 @@ def recovery_queue(db: Session = Depends(get_db)):
             "reason": payment.failure_reason,
             "probability": recovery.ai_probability,
             "action": recovery.recommended_action,
-            "status": (
-                "Ready"
-                if recovery.policy_decision == "APPROVE"
-                else "Review"
-            ),
+            "status": status,
             "policy_decision": recovery.policy_decision,
             "execution_result": recovery.execution_result,
+            "active": (
+                recovery.execution_result == "pending"
+                and recovery.policy_decision in {"APPROVE", "ESCALATE"}
+            ),
         })
+
+    active_payment_ids = {
+        item["payment_id"]
+        for item in queue
+        if item["active"]
+    }
 
     return {
         "count": len(queue),
+        "active_count": len(active_payment_ids),
         "queue": queue
     }
 
@@ -571,8 +631,16 @@ def evaluation_metrics(db: Session = Depends(get_db)):
         payments,
     )
 
+    active_payment_ids = {
+        recovery.payment_id
+        for recovery in recoveries
+        if recovery.execution_result == "pending"
+        and recovery.policy_decision in {"APPROVE", "ESCALATE"}
+    }
+
     return {
         "policy_evaluation": policy_evaluation,
         "recovery_metrics": recovery_metrics,
         "revenue_metrics": revenue_metrics,
+        "active_recovery_actions": len(active_payment_ids),
     }

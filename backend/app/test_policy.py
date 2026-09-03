@@ -89,3 +89,42 @@ def test_stop_unsupported_action():
 
     assert decision.decision == "STOP"
     assert decision.allowed is False
+
+
+def test_stop_non_failed_payment():
+    payment = SimpleNamespace(
+        amount=4999.0,
+        status="success",
+        attempt_count=1,
+        failure_reason=None,
+    )
+    recommendation = SimpleNamespace(
+        recovery_probability=0.95,
+        confidence=0.95,
+        recommended_action="delayed_retry",
+    )
+
+    decision = evaluate_policy(payment, recommendation)
+
+    assert decision.decision == "STOP"
+    assert decision.allowed is False
+
+
+def test_stop_opted_out_customer():
+    payment = SimpleNamespace(
+        amount=4999.0,
+        status="failed",
+        attempt_count=1,
+        failure_reason="insufficient_funds",
+    )
+    customer = SimpleNamespace(opted_out=True)
+    recommendation = SimpleNamespace(
+        recovery_probability=0.95,
+        confidence=0.95,
+        recommended_action="delayed_retry",
+    )
+
+    decision = evaluate_policy(payment, recommendation, customer)
+
+    assert decision.decision == "STOP"
+    assert decision.allowed is False
